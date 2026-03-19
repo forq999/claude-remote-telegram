@@ -113,6 +113,8 @@ def create_bot(token: str, admin_id: int, db_getter):
                 lines.append(f"\n{current_server}{stale_mark}")
             lines.append(
                 f"  {s['project_name']} ({s['project_path']})")
+            lines.append(
+                f"    /stop {s['server']} {s['project_path']}")
 
         await update.message.reply_text("\n".join(lines))
 
