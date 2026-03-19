@@ -111,10 +111,11 @@ start_session() {
     cpu_time=$(awk '{print $14+$15}' "/proc/$pid/stat" 2>/dev/null || echo "0")
     echo "$cpu_time" > "$PID_DIR/${name}.cpu"
 
-    # 세션 URL 추출 (최대 10초 대기)
+    # 세션 URL 추출 (최대 5초 대기)
     local session_url="" wait_count=0
-    while [ $wait_count -lt 10 ]; do
-        session_url=$(grep -oP 'https://claude\.ai/code/session_[A-Za-z0-9]+' "$PID_DIR/${name}.log" 2>/dev/null | head -1)
+    while [ $wait_count -lt 5 ]; do
+        session_url=$(grep -oP 'https://claude\.ai/code/session_[A-Za-z0-9]+' "$PID_DIR/${name}.log" 2>/dev/null || true)
+        session_url=$(echo "$session_url" | head -1)
         [ -n "$session_url" ] && break
         sleep 1
         wait_count=$((wait_count + 1))
