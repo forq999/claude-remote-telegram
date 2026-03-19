@@ -85,9 +85,7 @@ def create_bot(token: str, admin_id: int, db_getter):
             InlineKeyboardButton("Stop", callback_data=callback_data)
         ]])
         await update.message.reply_text(
-            f"Queued *start* `#{cmd_id}`\n"
-            f"Server: `{server_name}`\n"
-            f"Path: `{project_path}`",
+            f"*Started* `{server_name}` / `{project_path}`",
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=markup)
 
@@ -121,10 +119,9 @@ def create_bot(token: str, admin_id: int, db_getter):
             markup = InlineKeyboardMarkup([[
                 InlineKeyboardButton("Restart", callback_data=run_data)
             ]])
+        target = f"`{project_path}`" if project_path else "all"
         await update.message.reply_text(
-            f"Queued *stop*\n"
-            f"Server: `{server_name}`\n"
-            f"Target: {target}",
+            f"*Stopped* `{server_name}` / {target}",
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=markup)
 
@@ -339,9 +336,7 @@ def create_bot(token: str, admin_id: int, db_getter):
                 InlineKeyboardButton("Restart", callback_data=run_data)
             ]]) if len(run_data) <= 64 else None
             await query.edit_message_text(
-                f"Queued *stop*\n"
-                f"Server: `{server_name}`\n"
-                f"Path: `{project_path}`",
+                f"*Stopped* `{server_name}` / `{project_path}`",
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=markup)
 
@@ -349,7 +344,7 @@ def create_bot(token: str, admin_id: int, db_getter):
             existing = await get_running_session(db, server_name, project_path)
             if existing:
                 await query.edit_message_text(
-                    f"Already running on `{server_name}`\n`{project_path}`",
+                    f"Already running on `{server_name}` / `{project_path}`",
                     parse_mode=ParseMode.MARKDOWN)
                 return
             cmd_id = await create_command(db, server_name, "start", project_path, {})
@@ -358,9 +353,7 @@ def create_bot(token: str, admin_id: int, db_getter):
                 InlineKeyboardButton("Stop", callback_data=stop_data)
             ]]) if len(stop_data) <= 64 else None
             await query.edit_message_text(
-                f"Queued *start* `#{cmd_id}`\n"
-                f"Server: `{server_name}`\n"
-                f"Path: `{project_path}`",
+                f"*Started* `{server_name}` / `{project_path}`",
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=markup)
 
