@@ -82,8 +82,17 @@ start_session() {
         return
     fi
 
+    # 이전 세션 ID가 있으면 --resume 추가
+    local resume_opt=""
+    if [ -f "$PID_DIR/${name}.session" ]; then
+        local prev_session
+        prev_session=$(cat "$PID_DIR/${name}.session")
+        resume_opt="--resume $prev_session"
+        log "Resuming session: $prev_session"
+    fi
+
     # script으로 TTY 제공, PID 파일에 script PID 기록 후 claude PID로 교체
-    (cd "$path" && script -qefc "claude $CLAUDE_OPTS --name '$name'" "$PID_DIR/${name}.log" < /dev/null > /dev/null 2>&1) 9>&- &
+    (cd "$path" && script -qefc "claude $CLAUDE_OPTS $resume_opt --name '$name'" "$PID_DIR/${name}.log" < /dev/null > /dev/null 2>&1) 9>&- &
     sleep 1
     # script이 실행한 실제 claude 프로세스 PID 찾기
     local pid
@@ -112,7 +121,13 @@ start_session() {
     done
     if [ -n "$session_url" ]; then
         echo "$session_url" > "$PID_DIR/${name}.url"
-        log "Session URL: $session_url"
+        # 세션 ID 추출 및 저장 (재시작 시 --resume용)
+        local session_id
+        session_id=$(echo "$session_url" | grep -oP 'session_[A-Za-z0-9]+')
+        if [ -n "$session_id" ]; then
+            echo "$session_id" > "$PID_DIR/${name}.session"
+        fi
+        log "Session URL: $session_url (ID: $session_id)"
     fi
 
     log "Started session: $name (PID $pid) at $path"
@@ -204,7 +219,8 @@ process_commands() {
                     cbase=$(basename "$pf" .pid)
                     rm -f "$pf" "$PID_DIR/${cbase}.cpu" \
                           "$PID_DIR/${cbase}.active" "$PID_DIR/${cbase}.path" \
-                          "$PID_DIR/${cbase}.timeout"
+                          "$PID_DIR/${cbase}.timeout" "$PID_DIR/${cbase}.session" \
+                          "$PID_DIR/${cbase}.url"
                     log "Clean: killed $cbase (PID $cpid)"
                 done
                 rm -f /tmp/claude-agent.lock
