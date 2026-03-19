@@ -84,7 +84,7 @@ start_session() {
 
     # 서브셸에서 cd + 실행 (부모 셸 CWD 보호)
     local pid
-    cd "$path" && script -qefc "claude $CLAUDE_OPTS --name \"$name\"" "$PID_DIR/${name}.log" &
+    (cd "$path" && script -qefc "claude $CLAUDE_OPTS --name '$name'" "$PID_DIR/${name}.log" < /dev/null > /dev/null 2>&1) &
     pid=$!
     if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
         api_call POST "/api/commands/$cmd_id/done" \
