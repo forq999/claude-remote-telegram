@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-# --- 크론 환경에서 PATH 로드 ---
-source ~/.bashrc 2>/dev/null || true
+# --- 크론 환경에서 PATH 설정 ---
+export PATH="$HOME/.local/bin:$PATH"
 
 # === 설정 (서버별 수정) ===
 SERVER_NAME="server-a"
