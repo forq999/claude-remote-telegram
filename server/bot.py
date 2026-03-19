@@ -272,12 +272,24 @@ def create_bot(token: str, admin_id: int, db_getter):
 
     @admin_only
     async def cmd_clean(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        from server.database import create_command, get_sessions
+        from server.database import create_command, get_sessions, get_all_servers
         parts = update.message.text.split()
         if len(parts) < 2:
+            db = await db_getter()
+            servers = await get_all_servers(db)
+            if not servers:
+                await update.message.reply_text("No registered servers.")
+                return
+            buttons = []
+            for s in servers:
+                cb = f"clean:{s['name']}"
+                if len(cb) <= 64:
+                    buttons.append([InlineKeyboardButton(
+                        f"Clean {s['name']}", callback_data=cb)])
+            markup = InlineKeyboardMarkup(buttons) if buttons else None
             await update.message.reply_text(
-                "Usage: `/clean <server>`",
-                parse_mode=ParseMode.MARKDOWN)
+                "*Select server to clean:*",
+                parse_mode=ParseMode.MARKDOWN, reply_markup=markup)
             return
         server_name = parts[1]
         db = await db_getter()
@@ -327,14 +339,34 @@ def create_bot(token: str, admin_id: int, db_getter):
             return
         await query.answer()
         parts = query.data.split(":", 2)
-        if len(parts) != 3:
+        if len(parts) < 2:
             return
-        action, server_name, path_or_name = parts
-        from server.database import get_server, get_running_session, create_command
+        action = parts[0]
+        server_name = parts[1]
+        path_or_name = parts[2] if len(parts) > 2 else None
+        from server.database import get_server, get_running_session, create_command, get_sessions
         db = await db_getter()
         server = await get_server(db, server_name)
         if not server:
             await query.edit_message_text(f"Server `{server_name}` not found.", parse_mode=ParseMode.MARKDOWN)
+            return
+
+        if action == "clean":
+            sessions = await get_sessions(db, server_name)
+            count = len(sessions)
+            for s in sessions:
+                await db.execute(
+                    "UPDATE sessions SET status='stopped' WHERE server=? AND project_path=?",
+                    (server_name, s["project_path"]))
+            await db.commit()
+            await create_command(db, server_name, "clean", None, {})
+            await query.edit_message_text(
+                f"*Clean* `{server_name}`\n"
+                f"Sessions cleared: {count}",
+                parse_mode=ParseMode.MARKDOWN)
+            return
+
+        if not path_or_name:
             return
         aliases = json.loads(server["aliases"] or "{}")
         project_path = resolve_alias(path_or_name, aliases)
