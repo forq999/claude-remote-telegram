@@ -24,21 +24,21 @@ Telegram bot for managing Claude Code Remote sessions across multiple distribute
 
 ### 1. Create Telegram Bot
 
-#### 1-1. BotFather에서 봇 생성
+#### 1-1. Create Bot via BotFather
 
-1. Telegram에서 `@BotFather`를 검색하여 대화 시작
-2. `/newbot` 명령어 입력
-3. 봇 표시 이름 입력 (예: `Claude Remote Manager`)
-4. 봇 username 입력 (예: `my_claude_remote_bot`)
-   - 반드시 `bot`으로 끝나야 함 (`_bot` 또는 `Bot`)
-5. 생성 완료 시 **bot token**이 표시됨 (예: `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
-   - 이 토큰을 `.env`의 `TELEGRAM_BOT_TOKEN`에 입력
+1. Search `@BotFather` on Telegram and start a chat
+2. Send `/newbot`
+3. Enter a display name (e.g., `Claude Remote Manager`)
+4. Enter a username (e.g., `my_claude_remote_bot`)
+   - Must end with `bot` (`_bot` or `Bot`)
+5. BotFather will respond with a **bot token** (e.g., `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
+   - Use this as `TELEGRAM_BOT_TOKEN` in `.env`
 
-#### 1-2. 봇 명령어 자동완성 등록
+#### 1-2. Register Command Autocomplete
 
-1. `@BotFather`에서 `/setcommands` 입력
-2. 방금 만든 봇 선택
-3. 아래 내용을 그대로 복사하여 전송:
+1. Send `/setcommands` to `@BotFather`
+2. Select your bot
+3. Copy and paste the following:
 
 ```
 run - Start session (server path|alias)
@@ -50,22 +50,22 @@ clean - Kill all sessions and cleanup (server)
 help - Show help message
 ```
 
-이렇게 하면 채팅창에서 `/` 입력 시 명령어 목록이 자동완성으로 표시됩니다.
+This enables command autocomplete when typing `/` in the chat.
 
-#### 1-3. 봇 설명 설정 (선택)
+#### 1-3. Bot Profile (Optional)
 
-`@BotFather`에서 추가 설정 가능:
+Additional settings available via `@BotFather`:
 
-- `/setdescription` - 봇 프로필에 표시되는 설명
-- `/setabouttext` - 봇 정보 페이지의 상세 설명
-- `/setuserpic` - 봇 프로필 사진
+- `/setdescription` - Short description shown on bot profile
+- `/setabouttext` - Detailed description on bot info page
+- `/setuserpic` - Bot profile picture
 
-#### 1-4. 관리자 Telegram ID 확인
+#### 1-4. Get Admin Telegram ID
 
-1. Telegram에서 `@userinfobot`을 검색하여 대화 시작
-2. 아무 메시지나 전송
-3. 응답으로 받은 숫자 ID를 `.env`의 `TELEGRAM_ADMIN_ID`에 입력
-   - 이 ID를 가진 사용자만 봇 명령어를 실행할 수 있음
+1. Search `@userinfobot` on Telegram and start a chat
+2. Send any message
+3. Use the numeric ID from the response as `TELEGRAM_ADMIN_ID` in `.env`
+   - Only this user will be able to execute bot commands
 
 ### 2. Bot Server (Docker)
 
