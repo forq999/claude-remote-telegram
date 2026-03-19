@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+# --- 크론 환경에서 PATH 로드 ---
+source ~/.bashrc 2>/dev/null || true
+
 # === 설정 (서버별 수정) ===
 SERVER_NAME="server-a"
 BOT_API_URL="https://123.45.67.89:8443"
