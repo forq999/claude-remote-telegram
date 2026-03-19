@@ -182,7 +182,8 @@ def create_bot(token: str, admin_id: int, db_getter):
 
     @admin_only
     async def cmd_servers(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        from server.database import get_all_servers, get_stale_servers
+        from datetime import datetime, timezone
+        from server.database import get_all_servers, get_stale_servers, get_sessions
         db = await db_getter()
         servers = await get_all_servers(db)
         stale = await get_stale_servers(db)
@@ -191,21 +192,41 @@ def create_bot(token: str, admin_id: int, db_getter):
             await update.message.reply_text("No registered servers.")
             return
 
-        lines = []
+        now = datetime.now(timezone.utc)
+        lines = ["*Servers*\n"]
         buttons = []
         for s in servers:
-            if s["name"] in stale:
-                lines.append(f"*{s['name']}* (offline)")
-            else:
-                lines.append(f"*{s['name']}* (online)")
+            is_stale = s["name"] in stale
+            icon = "+" if not is_stale else "-"
+            status = "online" if not is_stale else "offline"
+
+            # 마지막 heartbeat
+            hb_text = ""
+            if s["last_heartbeat"]:
+                hb = datetime.fromisoformat(s["last_heartbeat"])
+                if hb.tzinfo is None:
+                    hb = hb.replace(tzinfo=timezone.utc)
+                hb_ago = int((now - hb).total_seconds())
+                hb_text = f" | {fmt_duration(hb_ago)} ago"
+
+            # 활성 세션 수
+            sessions = await get_sessions(db, s["name"])
+            session_count = len(sessions)
+            session_text = f"{session_count} active" if session_count > 0 else "no sessions"
+
+            lines.append(f"[{icon}] *{s['name']}* ({status})")
+            lines.append(f"    {session_text}{hb_text}")
+
             aliases = json.loads(s["aliases"] or "{}")
             if aliases:
+                lines.append("    Aliases:")
                 for k, v in aliases.items():
-                    lines.append(f"  `{k}` -> `{v}`")
+                    lines.append(f"      `{k}` -> `{v}`")
                     run_data = f"run:{s['name']}:{k}"
                     if len(run_data) <= 64:
                         buttons.append([InlineKeyboardButton(
                             f"Run {s['name']} / {k}", callback_data=run_data)])
+            lines.append("")
 
         markup = InlineKeyboardMarkup(buttons) if buttons else None
         await update.message.reply_text(
