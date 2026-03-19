@@ -99,9 +99,10 @@ def create_api_router(db_getter, api_token: str, notify_callback=None) -> APIRou
 
     @router.post("/heartbeat")
     async def heartbeat(body: HeartbeatRequest, _=Depends(auth)):
-        from server.database import upsert_server
+        from server.database import upsert_server, get_stale_servers
         db = await db_getter()
         await upsert_server(db, body.server, body.allowed_paths, body.aliases)
+        await get_stale_servers(db)
         return {"ok": True}
 
     @router.post("/status")
