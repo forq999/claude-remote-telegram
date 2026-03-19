@@ -159,6 +159,9 @@ def create_bot(token: str, admin_id: int, db_getter):
                 status_line += f" | Active"
             elif idle_text:
                 status_line += f" | Idle: {idle_text}"
+            session_url = s["session_url"] if s["session_url"] else None
+            if session_url:
+                status_line += f"\n    [Open Session]({session_url})"
             lines.append(status_line)
 
             callback_data = f"stop:{s['server']}:{s['project_path']}"

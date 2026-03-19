@@ -23,6 +23,7 @@ class SessionReport(BaseModel):
     pid: int
     status: str
     idle_seconds: int
+    session_url: str = ""
 
 
 class StatusRequest(BaseModel):
@@ -105,7 +106,7 @@ def create_api_router(db_getter, api_token: str, notify_callback=None) -> APIRou
         for s in body.sessions:
             await upsert_session(
                 db, body.server, s.project_path, s.project_name,
-                s.pid, s.status,
+                s.pid, s.status, session_url=s.session_url,
             )
             if s.status == "running":
                 reported_paths.add(s.project_path)

@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     idle_timeout INTEGER DEFAULT 1800,
     started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_activity TIMESTAMP,
+    session_url TEXT DEFAULT '',
     UNIQUE(server, project_path)
 );
 """
@@ -41,6 +42,12 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 async def init_db(db: aiosqlite.Connection):
     await db.executescript(SCHEMA)
+    # 마이그레이션: session_url 컬럼 추가
+    try:
+        await db.execute("ALTER TABLE sessions ADD COLUMN session_url TEXT DEFAULT ''")
+        await db.commit()
+    except Exception:
+        pass  # 이미 존재
     await db.commit()
 
 
@@ -117,19 +124,20 @@ async def complete_command(db, command_id, status, error=None):
 
 
 async def upsert_session(db, server, project_path, project_name, pid, status,
-                         idle_timeout=1800):
+                         idle_timeout=1800, session_url=""):
     now = datetime.now(timezone.utc).isoformat()
     await db.execute(
         """INSERT INTO sessions (server, project_path, project_name, pid, status,
-                                idle_timeout, started_at, last_activity)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                                idle_timeout, started_at, last_activity, session_url)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(server, project_path) DO UPDATE SET
              pid=excluded.pid, status=excluded.status,
              project_name=excluded.project_name,
              last_activity=excluded.last_activity,
              idle_timeout=excluded.idle_timeout,
-             started_at=CASE WHEN sessions.status='stopped' THEN excluded.started_at ELSE sessions.started_at END""",
-        (server, project_path, project_name, pid, status, idle_timeout, now, now),
+             started_at=CASE WHEN sessions.status='stopped' THEN excluded.started_at ELSE sessions.started_at END,
+             session_url=CASE WHEN excluded.session_url != '' THEN excluded.session_url ELSE sessions.session_url END""",
+        (server, project_path, project_name, pid, status, idle_timeout, now, now, session_url),
     )
     await db.commit()
 
