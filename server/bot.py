@@ -186,6 +186,7 @@ def create_bot(token: str, admin_id: int, db_getter):
             return
 
         lines = []
+        buttons = []
         for s in servers:
             if s["name"] in stale:
                 lines.append(f"*{s['name']}* (offline)")
@@ -193,10 +194,16 @@ def create_bot(token: str, admin_id: int, db_getter):
                 lines.append(f"*{s['name']}* (online)")
             aliases = json.loads(s["aliases"] or "{}")
             if aliases:
-                alias_list = ", ".join(f"`{k}` -> `{v}`" for k, v in aliases.items())
-                lines.append(f"  Aliases: {alias_list}")
+                for k, v in aliases.items():
+                    lines.append(f"  `{k}` -> `{v}`")
+                    run_data = f"run:{s['name']}:{k}"
+                    if len(run_data) <= 64:
+                        buttons.append([InlineKeyboardButton(
+                            f"Run {s['name']} / {k}", callback_data=run_data)])
 
-        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+        markup = InlineKeyboardMarkup(buttons) if buttons else None
+        await update.message.reply_text(
+            "\n".join(lines), reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
 
     @admin_only
     async def cmd_timeout(update: Update, context: ContextTypes.DEFAULT_TYPE):
