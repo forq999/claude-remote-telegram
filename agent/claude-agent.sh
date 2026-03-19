@@ -82,11 +82,13 @@ start_session() {
         return
     fi
 
-    # 서브셸에서 cd + 실행 (부모 셸 CWD 보호)
-    local pid
+    # script으로 TTY 제공, PID 파일에 script PID 기록 후 claude PID로 교체
     (cd "$path" && script -qefc "claude $CLAUDE_OPTS --name '$name'" "$PID_DIR/${name}.log" < /dev/null > /dev/null 2>&1) &
-    pid=$!
-    if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
+    sleep 1
+    # script이 실행한 실제 claude 프로세스 PID 찾기
+    local pid
+    pid=$(pgrep -f "claude.*--remote-control.*--name.*$name" | head -1)
+    if [ -z "$pid" ]; then
         api_call POST "/api/commands/$cmd_id/done" \
             -d '{"status":"failed","error":"cannot start session at path"}'
         return
