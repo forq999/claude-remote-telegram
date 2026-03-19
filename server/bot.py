@@ -124,11 +124,24 @@ def create_bot(token: str, admin_id: int, db_getter):
                 hours, remainder = divmod(diff, 3600)
                 minutes, secs = divmod(remainder, 60)
                 if hours > 0:
-                    uptime = f" ({hours}h {minutes}m)"
+                    uptime = f"{hours}h {minutes}m"
                 else:
-                    uptime = f" ({minutes}m {secs}s)"
+                    uptime = f"{minutes}m {secs}s"
+            # idle 시간 계산
+            idle = ""
+            if s["last_activity"]:
+                last_act = datetime.fromisoformat(s["last_activity"])
+                if last_act.tzinfo is None:
+                    last_act = last_act.replace(tzinfo=timezone.utc)
+                idle_secs = int((now - last_act).total_seconds())
+                if idle_secs < 60:
+                    idle = "active"
+                else:
+                    im, isec = divmod(idle_secs, 60)
+                    ih, im = divmod(im, 60)
+                    idle = f"idle {ih}h {im}m" if ih > 0 else f"idle {im}m"
             lines.append(
-                f"  {s['project_name']}{uptime}")
+                f"  {s['project_name']} | {uptime} | {idle}")
             callback_data = f"stop:{s['server']}:{s['project_path']}"
             if len(callback_data) <= 64:
                 buttons.append([InlineKeyboardButton(
