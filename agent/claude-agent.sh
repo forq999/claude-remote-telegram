@@ -139,7 +139,13 @@ start_session() {
     done
     [ -n "$session_url" ] && echo "$session_url" > "$PID_DIR/${name}.url"
     [ -n "$session_id" ] && echo "$session_id" > "$PID_DIR/${name}.sid"
-    log "Session URL: ${session_url:-none} (UUID: ${session_id:-none})"
+    log "Session URL: ${session_url:-none} (ID: ${session_name})"
+
+    # done 전에 세션 정보를 먼저 DB에 보고
+    api_call POST "/api/status" \
+        -d "$(jq -nc --arg s "$SERVER_NAME" --arg pp "$path" --arg pn "$name" \
+            --argjson pid "$pid" --arg url "${session_url:-}" --arg sid "$session_name" \
+            '{server:$s,sessions:[{project_path:$pp,project_name:$pn,pid:$pid,status:"running",idle_seconds:0,session_url:$url,session_id:$sid}]}')" || true
 
     log "Started session: $name (PID $pid) at $path"
     api_call POST "/api/commands/$cmd_id/done" -d '{"status":"done"}'
