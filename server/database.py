@@ -116,14 +116,15 @@ async def upsert_session(db, server, project_path, project_name, pid, status,
     now = datetime.now(timezone.utc).isoformat()
     await db.execute(
         """INSERT INTO sessions (server, project_path, project_name, pid, status,
-                                idle_timeout, last_activity)
-           VALUES (?, ?, ?, ?, ?, ?, ?)
+                                idle_timeout, started_at, last_activity)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(server, project_path) DO UPDATE SET
              pid=excluded.pid, status=excluded.status,
              project_name=excluded.project_name,
              last_activity=excluded.last_activity,
-             idle_timeout=excluded.idle_timeout""",
-        (server, project_path, project_name, pid, status, idle_timeout, now),
+             idle_timeout=excluded.idle_timeout,
+             started_at=CASE WHEN sessions.status='stopped' THEN excluded.started_at ELSE sessions.started_at END""",
+        (server, project_path, project_name, pid, status, idle_timeout, now, now),
     )
     await db.commit()
 
