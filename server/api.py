@@ -35,7 +35,7 @@ class CommandDoneRequest(BaseModel):
     error: str | None = None
 
 
-def create_api_router(db_getter, api_token: str) -> APIRouter:
+def create_api_router(db_getter, api_token: str, notify_callback=None) -> APIRouter:
     router = APIRouter(prefix="/api")
     auth = get_auth_checker(api_token)
 
@@ -81,7 +81,10 @@ def create_api_router(db_getter, api_token: str) -> APIRouter:
             if s.status == "running":
                 reported_paths.add(s.project_path)
         # DB에 running인데 에이전트가 보고하지 않은 세션 → stopped
-        await stop_missing_sessions(db, body.server, reported_paths)
+        stopped = await stop_missing_sessions(db, body.server, reported_paths)
+        if stopped and notify_callback:
+            for path in stopped:
+                await notify_callback(f"Session stopped: {body.server} @ {path}")
         return {"ok": True}
 
     return router

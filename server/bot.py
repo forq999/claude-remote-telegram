@@ -92,6 +92,7 @@ def create_bot(token: str, admin_id: int, db_getter):
 
     @admin_only
     async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        from datetime import datetime, timezone
         from server.database import get_sessions, get_all_servers, get_stale_servers
         db = await db_getter()
         parts = update.message.text.split()
@@ -104,6 +105,7 @@ def create_bot(token: str, admin_id: int, db_getter):
             await update.message.reply_text("No active sessions.")
             return
 
+        now = datetime.now(timezone.utc)
         lines = []
         buttons = []
         current_server = None
@@ -112,8 +114,21 @@ def create_bot(token: str, admin_id: int, db_getter):
                 current_server = s["server"]
                 stale_mark = " (stale)" if current_server in stale else ""
                 lines.append(f"\n{current_server}{stale_mark}")
+            # 실행 시간 계산
+            uptime = ""
+            if s["started_at"]:
+                started = datetime.fromisoformat(s["started_at"])
+                if started.tzinfo is None:
+                    started = started.replace(tzinfo=timezone.utc)
+                diff = int((now - started).total_seconds())
+                hours, remainder = divmod(diff, 3600)
+                minutes, secs = divmod(remainder, 60)
+                if hours > 0:
+                    uptime = f" ({hours}h {minutes}m)"
+                else:
+                    uptime = f" ({minutes}m {secs}s)"
             lines.append(
-                f"  {s['project_name']} ({s['project_path']})")
+                f"  {s['project_name']}{uptime}")
             callback_data = f"stop:{s['server']}:{s['project_path']}"
             if len(callback_data) <= 64:
                 buttons.append([InlineKeyboardButton(
@@ -183,6 +198,28 @@ def create_bot(token: str, admin_id: int, db_getter):
             f"Timeout -> {minutes}m: {server_name} @ {project_path}")
 
     @admin_only
+    async def cmd_clean(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        from server.database import create_command, get_sessions
+        parts = update.message.text.split()
+        if len(parts) < 2:
+            await update.message.reply_text("Usage: /clean <server>")
+            return
+        server_name = parts[1]
+        db = await db_getter()
+        # DB의 모든 running 세션을 stopped로
+        sessions = await get_sessions(db, server_name)
+        count = len(sessions)
+        for s in sessions:
+            await db.execute(
+                "UPDATE sessions SET status='stopped' WHERE server=? AND project_path=?",
+                (server_name, s["project_path"]))
+        await db.commit()
+        # 에이전트에 전체 중지 + 정리 명령
+        await create_command(db, server_name, "clean", None, {})
+        await update.message.reply_text(
+            f"Clean: {server_name} - {count} sessions cleared, cleanup queued")
+
+    @admin_only
     async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = (
             "/run <server> <path|alias> - Start session\n"
@@ -190,6 +227,7 @@ def create_bot(token: str, admin_id: int, db_getter):
             "/status [server] - Show status\n"
             "/servers - List servers\n"
             "/timeout <min> <server> <path|alias> - Set timeout\n"
+            "/clean <server> - Kill all sessions + cleanup\n"
             "/help - This message"
         )
         await update.message.reply_text(text)
@@ -221,6 +259,7 @@ def create_bot(token: str, admin_id: int, db_getter):
     app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("servers", cmd_servers))
     app.add_handler(CommandHandler("timeout", cmd_timeout))
+    app.add_handler(CommandHandler("clean", cmd_clean))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CallbackQueryHandler(callback_stop))
 

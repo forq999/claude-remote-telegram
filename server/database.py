@@ -156,13 +156,16 @@ async def stop_missing_sessions(db, server, reported_paths):
         (server,),
     )
     rows = await cursor.fetchall()
+    stopped = []
     for row in rows:
         if row["project_path"] not in reported_paths:
             await db.execute(
                 "UPDATE sessions SET status='stopped', last_activity=? WHERE server=? AND project_path=? AND status='running'",
                 (now, server, row["project_path"]),
             )
+            stopped.append(row["project_path"])
     await db.commit()
+    return stopped
 
 
 async def get_stale_servers(db, stale_threshold_seconds=120):

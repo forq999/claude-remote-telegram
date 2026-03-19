@@ -180,6 +180,24 @@ process_commands() {
                 api_call POST "/api/commands/$id/done" -d '{"status":"done"}'
                 log "Timeout updated: $name -> ${new_timeout}s"
                 ;;
+            clean)
+                # PID 파일로 추적 중인 세션만 종료 (로컬에서 직접 실행한 건 건드리지 않음)
+                for pf in "$PID_DIR"/*.pid; do
+                    [ -f "$pf" ] || continue
+                    local cpid
+                    cpid=$(cat "$pf")
+                    kill "$cpid" 2>/dev/null || true
+                    local cbase
+                    cbase=$(basename "$pf" .pid)
+                    rm -f "$pf" "$PID_DIR/${cbase}.cpu" \
+                          "$PID_DIR/${cbase}.active" "$PID_DIR/${cbase}.path" \
+                          "$PID_DIR/${cbase}.timeout"
+                    log "Clean: killed $cbase (PID $cpid)"
+                done
+                rm -f /tmp/claude-agent.lock
+                api_call POST "/api/commands/$id/done" -d '{"status":"done"}'
+                log "Clean completed"
+                ;;
         esac
     done
 }
