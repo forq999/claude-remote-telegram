@@ -160,8 +160,11 @@ def create_bot(token: str, admin_id: int, db_getter):
             elif idle_text:
                 status_line += f" | Idle: {idle_text}"
             session_url = s["session_url"] if s["session_url"] else None
+            session_id = s["session_id"] if s["session_id"] else None
             if session_url:
                 status_line += f"\n    [Open Session]({session_url})"
+            if session_id:
+                status_line += f"\n    ID: `{session_id}`"
             lines.append(status_line)
 
             callback_data = f"stop:{s['server']}:{s['project_path']}"
@@ -326,13 +329,12 @@ def create_bot(token: str, admin_id: int, db_getter):
                     f"Already running on `{server_name}` / `{project_path}`",
                     parse_mode=ParseMode.MARKDOWN)
                 return
-            # 이전 세션 UUID가 있으면 resume 파라미터 전달
+            # 이전 세션 이름이 있으면 resume 파라미터 전달
             from server.database import get_session_by_path
             prev = await get_session_by_path(db, server_name, project_path)
             params = {}
-            if prev and prev["session_url"]:
-                # session_url에서 UUID를 가져오는 게 아니라 DB에 저장된 session_id 사용
-                params = {"resume": prev["session_id"]} if prev["session_id"] else {}
+            if prev and prev["session_id"]:
+                params = {"resume": prev["session_id"]}
             await create_command(db, server_name, "start", project_path, params)
             await query.edit_message_text("Resuming..." if params.get("resume") else "Starting...")
 

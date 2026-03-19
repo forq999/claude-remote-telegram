@@ -82,21 +82,28 @@ start_session() {
         return
     fi
 
-    # params에 resume UUID가 있으면 --resume 추가
-    local resume_opt=""
+    # resume ID가 있으면 --resume, 없으면 --name + 랜덤 ID로 새 세션
+    local session_opt="" session_name=""
     local resume_id
     resume_id=$(echo "$3" | jq -r '.resume // empty' 2>/dev/null || true)
     if [ -n "$resume_id" ]; then
-        resume_opt="--resume $resume_id"
+        session_name="$resume_id"
+        session_opt="--resume $resume_id"
         log "Resuming session: $resume_id"
+    else
+        local rand_id
+        rand_id=$(head -c 5 /dev/urandom | xxd -p | cut -c1-5)
+        session_name="${SERVER_NAME}_${name}_${rand_id}"
+        session_opt="--name $session_name"
+        log "New session: $session_name"
     fi
 
     # script으로 TTY 제공
-    (cd "$path" && script -qefc "claude $CLAUDE_OPTS $resume_opt --name '$name'" "$PID_DIR/${name}.log" < /dev/null > /dev/null 2>&1) 9>&- &
+    (cd "$path" && script -qefc "claude $CLAUDE_OPTS $session_opt" "$PID_DIR/${name}.log" < /dev/null > /dev/null 2>&1) 9>&- &
     sleep 1
     # script이 실행한 실제 claude 프로세스 PID 찾기
     local pid
-    pid=$(pgrep -f "claude.*--remote-control.*--name.*$name" | head -1)
+    pid=$(pgrep -f "claude.*--remote-control.*$session_name" | head -1)
     if [ -z "$pid" ]; then
         api_call POST "/api/commands/$cmd_id/done" \
             -d '{"status":"failed","error":"cannot start session at path"}'
@@ -104,6 +111,7 @@ start_session() {
     fi
     echo "$pid" > "$pid_file"
     echo "$path" > "$PID_DIR/${name}.path"
+    echo "$session_name" > "$PID_DIR/${name}.sid"
     touch "$PID_DIR/${name}.active"
 
     # 초기 CPU 시간 저장
