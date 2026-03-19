@@ -83,7 +83,7 @@ start_session() {
     fi
 
     # script으로 TTY 제공, PID 파일에 script PID 기록 후 claude PID로 교체
-    (cd "$path" && script -qefc "claude $CLAUDE_OPTS --name '$name'" "$PID_DIR/${name}.log" < /dev/null > /dev/null 2>&1) &
+    (cd "$path" && script -qefc "claude $CLAUDE_OPTS --name '$name'" "$PID_DIR/${name}.log" < /dev/null > /dev/null 2>&1) 9>&- &
     sleep 1
     # script이 실행한 실제 claude 프로세스 PID 찾기
     local pid
