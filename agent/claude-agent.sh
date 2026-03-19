@@ -33,6 +33,7 @@ validate_path() {
     fi
     IFS=',' read -ra PATHS <<< "$ALLOWED_PATHS"
     for allowed in "${PATHS[@]}"; do
+        allowed="${allowed%/}"
         if [[ "$path" == "$allowed" || "$path" == "$allowed/"* ]]; then
             return 0
         fi
