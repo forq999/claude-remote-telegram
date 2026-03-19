@@ -77,17 +77,7 @@ def create_bot(token: str, admin_id: int, db_getter):
                 parse_mode=ParseMode.MARKDOWN)
             return
 
-        cmd_id = await create_command(db, server_name, "start", project_path, {})
-        callback_data = f"stop:{server_name}:{project_path}"
-        if len(callback_data) > 64:
-            callback_data = f"stop:{server_name}:{alias_or_path}"
-        markup = InlineKeyboardMarkup([[
-            InlineKeyboardButton("Stop", callback_data=callback_data)
-        ]])
-        await update.message.reply_text(
-            f"*Started* `{server_name}` / `{project_path}`",
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=markup)
+        await create_command(db, server_name, "start", project_path, {})
 
     @admin_only
     async def cmd_stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -110,20 +100,6 @@ def create_bot(token: str, admin_id: int, db_getter):
         project_path = resolve_alias(alias_or_path, aliases) if alias_or_path else None
 
         await create_command(db, server_name, "stop", project_path, {})
-        target = f"`{project_path}`" if project_path else "all sessions"
-        markup = None
-        if project_path:
-            run_data = f"run:{server_name}:{project_path}"
-            if len(run_data) > 64:
-                run_data = f"run:{server_name}:{alias_or_path}"
-            markup = InlineKeyboardMarkup([[
-                InlineKeyboardButton("Restart", callback_data=run_data)
-            ]])
-        target = f"`{project_path}`" if project_path else "all"
-        await update.message.reply_text(
-            f"*Stopped* `{server_name}` / {target}",
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=markup)
 
     @admin_only
     async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -331,14 +307,7 @@ def create_bot(token: str, admin_id: int, db_getter):
 
         if action == "stop":
             await create_command(db, server_name, "stop", project_path, {})
-            run_data = f"run:{server_name}:{path_or_name}"
-            markup = InlineKeyboardMarkup([[
-                InlineKeyboardButton("Restart", callback_data=run_data)
-            ]]) if len(run_data) <= 64 else None
-            await query.edit_message_text(
-                f"*Stopped* `{server_name}` / `{project_path}`",
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=markup)
+            await query.edit_message_text("Stopping...")
 
         elif action == "run":
             existing = await get_running_session(db, server_name, project_path)
@@ -347,15 +316,8 @@ def create_bot(token: str, admin_id: int, db_getter):
                     f"Already running on `{server_name}` / `{project_path}`",
                     parse_mode=ParseMode.MARKDOWN)
                 return
-            cmd_id = await create_command(db, server_name, "start", project_path, {})
-            stop_data = f"stop:{server_name}:{path_or_name}"
-            markup = InlineKeyboardMarkup([[
-                InlineKeyboardButton("Stop", callback_data=stop_data)
-            ]]) if len(stop_data) <= 64 else None
-            await query.edit_message_text(
-                f"*Started* `{server_name}` / `{project_path}`",
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=markup)
+            await create_command(db, server_name, "start", project_path, {})
+            await query.edit_message_text("Starting...")
 
     app = Application.builder().token(token).build()
     app.add_handler(CommandHandler("run", cmd_start))

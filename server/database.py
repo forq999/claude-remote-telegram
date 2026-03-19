@@ -109,6 +109,11 @@ async def complete_command(db, command_id, status, error=None):
             (status, now, command_id),
         )
     await db.commit()
+    cursor = await db.execute(
+        "SELECT action, server, project_path FROM commands WHERE id=?",
+        (command_id,),
+    )
+    return await cursor.fetchone()
 
 
 async def upsert_session(db, server, project_path, project_name, pid, status,

@@ -56,8 +56,37 @@ def create_api_router(db_getter, api_token: str, notify_callback=None) -> APIRou
     async def command_done(command_id: int, body: CommandDoneRequest,
                            _=Depends(auth)):
         from server.database import complete_command
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
         db = await db_getter()
-        await complete_command(db, command_id, body.status, body.error)
+        cmd = await complete_command(db, command_id, body.status, body.error)
+        if cmd and notify_callback:
+            action = cmd["action"]
+            server = cmd["server"]
+            path = cmd["project_path"] or ""
+            name = path.rstrip("/").rsplit("/", 1)[-1] if path else ""
+            if body.status == "done":
+                if action == "start":
+                    run_data = f"stop:{server}:{path}"
+                    markup = InlineKeyboardMarkup([[
+                        InlineKeyboardButton("Stop", callback_data=run_data)
+                    ]]) if len(run_data) <= 64 else None
+                    await notify_callback(
+                        f"*Started* `{server}` / `{name}`",
+                        reply_markup=markup)
+                elif action == "stop":
+                    run_data = f"run:{server}:{path}"
+                    markup = InlineKeyboardMarkup([[
+                        InlineKeyboardButton("Restart", callback_data=run_data)
+                    ]]) if len(run_data) <= 64 else None
+                    await notify_callback(
+                        f"*Stopped* `{server}` / `{name}`",
+                        reply_markup=markup)
+                elif action == "clean":
+                    await notify_callback(
+                        f"*Cleaned* `{server}`")
+            elif body.status == "failed":
+                await notify_callback(
+                    f"*Failed* `{server}` / `{name}`\n{body.error or ''}")
         return {"ok": True}
 
     @router.post("/heartbeat")
