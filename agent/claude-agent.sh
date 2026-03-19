@@ -360,7 +360,7 @@ send_heartbeat() {
 }
 
 # === 메인 실행 ===
-log "Agent run started"
+# log "Agent run started"
 process_commands
 check_idle_sessions
 report_status
@@ -388,4 +388,4 @@ if [ -n "${AUTO_UPDATE_URL:-}" ]; then
     fi
 fi
 
-log "Agent run completed"
+# log "Agent run completed"
