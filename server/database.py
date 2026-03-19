@@ -204,5 +204,8 @@ async def get_stale_servers(db, stale_threshold_seconds=120):
                 hb = hb.replace(tzinfo=timezone.utc)
             diff = (now - hb).total_seconds()
             if diff > stale_threshold_seconds:
-                stale_servers.append(s["name"])
+                # 2분 초과 → 서버 + 세션 삭제
+                await db.execute("DELETE FROM sessions WHERE server=?", (s["name"],))
+                await db.execute("DELETE FROM servers WHERE name=?", (s["name"],))
+    await db.commit()
     return stale_servers
