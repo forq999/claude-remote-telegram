@@ -326,8 +326,15 @@ def create_bot(token: str, admin_id: int, db_getter):
                     f"Already running on `{server_name}` / `{project_path}`",
                     parse_mode=ParseMode.MARKDOWN)
                 return
-            await create_command(db, server_name, "start", project_path, {})
-            await query.edit_message_text("Starting...")
+            # 이전 세션 UUID가 있으면 resume 파라미터 전달
+            from server.database import get_session_by_path
+            prev = await get_session_by_path(db, server_name, project_path)
+            params = {}
+            if prev and prev["session_url"]:
+                # session_url에서 UUID를 가져오는 게 아니라 DB에 저장된 session_id 사용
+                params = {"resume": prev["session_id"]} if prev["session_id"] else {}
+            await create_command(db, server_name, "start", project_path, params)
+            await query.edit_message_text("Resuming..." if params.get("resume") else "Starting...")
 
     app = Application.builder().token(token).build()
     app.add_handler(CommandHandler("run", cmd_start))

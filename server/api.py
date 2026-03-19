@@ -24,6 +24,7 @@ class SessionReport(BaseModel):
     status: str
     idle_seconds: int
     session_url: str = ""
+    session_id: str = ""
 
 
 class StatusRequest(BaseModel):
@@ -75,13 +76,7 @@ def create_api_router(db_getter, api_token: str, notify_callback=None) -> APIRou
                         f"*Started* `{server}` / `{name}`",
                         reply_markup=markup)
                 elif action == "stop":
-                    run_data = f"run:{server}:{path}"
-                    markup = InlineKeyboardMarkup([[
-                        InlineKeyboardButton("Restart", callback_data=run_data)
-                    ]]) if len(run_data) <= 64 else None
-                    await notify_callback(
-                        f"*Stopped* `{server}` / `{name}`",
-                        reply_markup=markup)
+                    pass  # stop_missing_sessions에서 알림
                 elif action == "clean":
                     await notify_callback(
                         f"*Cleaned* `{server}`")
@@ -107,6 +102,7 @@ def create_api_router(db_getter, api_token: str, notify_callback=None) -> APIRou
             await upsert_session(
                 db, body.server, s.project_path, s.project_name,
                 s.pid, s.status, session_url=s.session_url,
+                session_id=s.session_id,
             )
             if s.status == "running":
                 reported_paths.add(s.project_path)

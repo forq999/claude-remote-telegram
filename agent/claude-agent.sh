@@ -82,16 +82,16 @@ start_session() {
         return
     fi
 
-    # 이전 세션 ID가 있으면 --resume 추가
+    # params에 resume UUID가 있으면 --resume 추가
     local resume_opt=""
-    if [ -f "$PID_DIR/${name}.session" ]; then
-        local prev_session
-        prev_session=$(cat "$PID_DIR/${name}.session")
-        resume_opt="--resume $prev_session"
-        log "Resuming session: $prev_session"
+    local resume_id
+    resume_id=$(echo "$3" | jq -r '.resume // empty' 2>/dev/null || true)
+    if [ -n "$resume_id" ]; then
+        resume_opt="--resume $resume_id"
+        log "Resuming session: $resume_id"
     fi
 
-    # script으로 TTY 제공, PID 파일에 script PID 기록 후 claude PID로 교체
+    # script으로 TTY 제공
     (cd "$path" && script -qefc "claude $CLAUDE_OPTS $resume_opt --name '$name'" "$PID_DIR/${name}.log" < /dev/null > /dev/null 2>&1) 9>&- &
     sleep 1
     # script이 실행한 실제 claude 프로세스 PID 찾기
@@ -130,7 +130,7 @@ start_session() {
         wait_count=$((wait_count + 1))
     done
     [ -n "$session_url" ] && echo "$session_url" > "$PID_DIR/${name}.url"
-    [ -n "$session_id" ] && echo "$session_id" > "$PID_DIR/${name}.session"
+    [ -n "$session_id" ] && echo "$session_id" > "$PID_DIR/${name}.sid"
     log "Session URL: ${session_url:-none} (UUID: ${session_id:-none})"
 
     log "Started session: $name (PID $pid) at $path"
@@ -192,7 +192,7 @@ process_commands() {
 
         case "$action" in
             start)
-                [ -n "$path" ] && start_session "$path" "$id"
+                [ -n "$path" ] && start_session "$path" "$id" "$params"
                 ;;
             stop)
                 if [ -n "$path" ]; then
@@ -222,7 +222,7 @@ process_commands() {
                     cbase=$(basename "$pf" .pid)
                     rm -f "$pf" "$PID_DIR/${cbase}.cpu" \
                           "$PID_DIR/${cbase}.active" "$PID_DIR/${cbase}.path" \
-                          "$PID_DIR/${cbase}.timeout" "$PID_DIR/${cbase}.session" \
+                          "$PID_DIR/${cbase}.timeout" "$PID_DIR/${cbase}.sid" \
                           "$PID_DIR/${cbase}.url"
                     log "Clean: killed $cbase (PID $cpid)"
                 done
@@ -308,13 +308,14 @@ report_status() {
         now_time=$(date +%s)
         idle_secs=$((now_time - active_time))
 
-        local url
+        local url sid
         url=$(cat "$PID_DIR/${name}.url" 2>/dev/null || echo "")
+        sid=$(cat "$PID_DIR/${name}.sid" 2>/dev/null || echo "")
 
         sessions=$(echo "$sessions" | jq -c \
             --arg pp "$path" --arg pn "$name" --argjson pid "$pid" \
-            --argjson idle "$idle_secs" --arg url "$url" \
-            '. + [{"project_path":$pp,"project_name":$pn,"pid":$pid,"status":"running","idle_seconds":$idle,"session_url":$url}]')
+            --argjson idle "$idle_secs" --arg url "$url" --arg sid "$sid" \
+            '. + [{"project_path":$pp,"project_name":$pn,"pid":$pid,"status":"running","idle_seconds":$idle,"session_url":$url,"session_id":$sid}]')
     done
 
     api_call POST "/api/status" \
