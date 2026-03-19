@@ -111,25 +111,27 @@ start_session() {
     cpu_time=$(awk '{print $14+$15}' "/proc/$pid/stat" 2>/dev/null || echo "0")
     echo "$cpu_time" > "$PID_DIR/${name}.cpu"
 
-    # 세션 URL 추출 (최대 5초 대기)
-    local session_url="" wait_count=0
+    # 세션 URL + UUID 추출 (최대 5초 대기)
+    local session_url="" session_id="" wait_count=0
+    # claude 프로젝트 디렉토리 (경로를 -로 변환)
+    local claude_proj_dir="$HOME/.claude/projects/$(echo "$path" | sed 's|^/|-|;s|/|-|g')"
     while [ $wait_count -lt 5 ]; do
-        session_url=$(grep -oP 'https://claude\.ai/code/session_[A-Za-z0-9]+' "$PID_DIR/${name}.log" 2>/dev/null || true)
-        session_url=$(echo "$session_url" | head -1)
-        [ -n "$session_url" ] && break
+        # URL from log
+        if [ -z "$session_url" ]; then
+            session_url=$(grep -oP 'https://claude\.ai/code/session_[A-Za-z0-9]+' "$PID_DIR/${name}.log" 2>/dev/null || true)
+            session_url=$(echo "$session_url" | head -1)
+        fi
+        # UUID from .jsonl file (가장 최근 파일)
+        if [ -z "$session_id" ] && [ -d "$claude_proj_dir" ]; then
+            session_id=$(ls -t "$claude_proj_dir"/*.jsonl 2>/dev/null | head -1 | xargs -r basename | sed 's/\.jsonl//' || true)
+        fi
+        [ -n "$session_url" ] && [ -n "$session_id" ] && break
         sleep 1
         wait_count=$((wait_count + 1))
     done
-    if [ -n "$session_url" ]; then
-        echo "$session_url" > "$PID_DIR/${name}.url"
-        # 세션 ID 추출 및 저장 (재시작 시 --resume용)
-        local session_id
-        session_id=$(echo "$session_url" | grep -oP 'session_[A-Za-z0-9]+')
-        if [ -n "$session_id" ]; then
-            echo "$session_id" > "$PID_DIR/${name}.session"
-        fi
-        log "Session URL: $session_url (ID: $session_id)"
-    fi
+    [ -n "$session_url" ] && echo "$session_url" > "$PID_DIR/${name}.url"
+    [ -n "$session_id" ] && echo "$session_id" > "$PID_DIR/${name}.session"
+    log "Session URL: ${session_url:-none} (UUID: ${session_id:-none})"
 
     log "Started session: $name (PID $pid) at $path"
     api_call POST "/api/commands/$cmd_id/done" -d '{"status":"done"}'
