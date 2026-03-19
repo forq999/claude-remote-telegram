@@ -3,7 +3,7 @@ set -euo pipefail
 
 # --- 크론 환경에서 PATH 설정 ---
 export PATH="$HOME/.local/bin:$PATH"
-CLAUDE_CMD="claude --dangerously-skip-permissions --effort max"
+CLAUDE_OPTS="--dangerously-skip-permissions --effort max --remote-control"
 
 # === 설정 (서버별 수정) ===
 SERVER_NAME="server-a"
@@ -84,7 +84,7 @@ start_session() {
 
     # 서브셸에서 cd + 실행 (부모 셸 CWD 보호)
     local pid
-    pid=$(cd "$path" && nohup $CLAUDE_CMD --remote-control --name "$name" > "$PID_DIR/${name}.log" 2>&1 & echo $!)
+    pid=$(cd "$path" && nohup claude $CLAUDE_OPTS --name "$name" > "$PID_DIR/${name}.log" 2>&1 & echo $!)
     if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
         api_call POST "/api/commands/$cmd_id/done" \
             -d '{"status":"failed","error":"cannot start session at path"}'
