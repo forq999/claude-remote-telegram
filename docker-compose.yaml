@@ -1,0 +1,12 @@
+services:
+  claude-remote-bot:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./data:/data
+    env_file:
+      - .env
+    restart: unless-stopped
