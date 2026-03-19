@@ -193,9 +193,17 @@ check_idle_sessions() {
         name=$(basename "$pid_file" .pid)
 
         if ! kill -0 "$pid" 2>/dev/null; then
+            local dead_path
+            dead_path=$(cat "$PID_DIR/${name}.path" 2>/dev/null || echo "unknown")
             rm -f "$pid_file" "$PID_DIR/${name}.cpu" \
-                  "$PID_DIR/${name}.active" "$PID_DIR/${name}.path"
-            log "Session died: $name (PID $pid)"
+                  "$PID_DIR/${name}.active" "$PID_DIR/${name}.path" \
+                  "$PID_DIR/${name}.timeout"
+            # DB에 stopped 보고
+            api_call POST "/api/status" \
+                -d "$(jq -nc --arg s "$SERVER_NAME" \
+                    --arg pp "$dead_path" --arg pn "$name" \
+                    '{server:$s,sessions:[{project_path:$pp,project_name:$pn,pid:0,status:"stopped",idle_seconds:0}]}')" || true
+            log "Session died: $name (PID $pid) - reported stopped"
             continue
         fi
 
@@ -220,11 +228,18 @@ check_idle_sessions() {
         idle_secs=$((now_time - active_time))
 
         if [ "$idle_secs" -ge "$timeout_val" ]; then
+            local timeout_path
+            timeout_path=$(cat "$PID_DIR/${name}.path" 2>/dev/null || echo "unknown")
             kill "$pid" 2>/dev/null || true
             rm -f "$pid_file" "$PID_DIR/${name}.cpu" \
                   "$PID_DIR/${name}.active" "$PID_DIR/${name}.path" \
                   "$PID_DIR/${name}.timeout"
-            log "Idle timeout ($idle_secs >= $timeout_val): $name (PID $pid)"
+            # DB에 stopped 보고
+            api_call POST "/api/status" \
+                -d "$(jq -nc --arg s "$SERVER_NAME" \
+                    --arg pp "$timeout_path" --arg pn "$name" \
+                    '{server:$s,sessions:[{project_path:$pp,project_name:$pn,pid:0,status:"stopped",idle_seconds:0}]}')" || true
+            log "Idle timeout ($idle_secs >= $timeout_val): $name (PID $pid) - reported stopped"
         fi
     done
 }
