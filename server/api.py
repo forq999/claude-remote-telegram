@@ -83,8 +83,18 @@ def create_api_router(db_getter, api_token: str, notify_callback=None) -> APIRou
         # DB에 running인데 에이전트가 보고하지 않은 세션 → stopped
         stopped = await stop_missing_sessions(db, body.server, reported_paths)
         if stopped and notify_callback:
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
             for path in stopped:
-                await notify_callback(f"Session stopped: {body.server} @ {path}")
+                name = path.rstrip("/").rsplit("/", 1)[-1]
+                run_data = f"run:{body.server}:{path}"
+                markup = None
+                if len(run_data) <= 64:
+                    markup = InlineKeyboardMarkup([[
+                        InlineKeyboardButton("Restart", callback_data=run_data)
+                    ]])
+                await notify_callback(
+                    f"*Stopped* `{body.server}` / `{name}`",
+                    reply_markup=markup)
         return {"ok": True}
 
     return router

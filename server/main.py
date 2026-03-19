@@ -36,10 +36,11 @@ def create_app(app_settings: Settings = None, start_bot: bool = True) -> FastAPI
     async def get_db():
         return db_holder["conn"]
 
-    async def notify(message: str):
+    async def notify(message: str, reply_markup=None):
         if bot_holder["app"]:
             await bot_holder["app"].bot.send_message(
-                chat_id=s.telegram_admin_id, text=message)
+                chat_id=s.telegram_admin_id, text=message,
+                parse_mode="Markdown", reply_markup=reply_markup)
 
     app = FastAPI(lifespan=lifespan)
     app.include_router(create_api_router(get_db, s.api_token, notify_callback=notify))
