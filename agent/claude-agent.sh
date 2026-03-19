@@ -5,16 +5,16 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 CLAUDE_OPTS="--dangerously-skip-permissions --effort max --remote-control"
 
-# === 설정 (서버별 수정) ===
-SERVER_NAME="server-a"
-BOT_API_URL="https://123.45.67.89:8443"
-API_TOKEN="your-shared-token"
-DEFAULT_TIMEOUT=1800
-ALLOWED_PATHS="/home/user/projects,/opt/work"
-ALIASES="front=/home/user/projects/frontend,api=/home/user/projects/backend/api"
-PID_DIR="/tmp/claude-sessions"
-LOG_FILE="/tmp/claude-agent.log"
-# === 설정 끝 ===
+# === 설정 파일 로드 ===
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -f "$SCRIPT_DIR/agent.env" ]; then
+    source "$SCRIPT_DIR/agent.env"
+elif [ -f "$HOME/agent.env" ]; then
+    source "$HOME/agent.env"
+else
+    echo "agent.env not found" >&2
+    exit 1
+fi
 
 # --- 동시 실행 방지 ---
 exec 9>/tmp/claude-agent.lock
