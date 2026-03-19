@@ -68,13 +68,25 @@ def create_api_router(db_getter, api_token: str, notify_callback=None) -> APIRou
             name = path.rstrip("/").rsplit("/", 1)[-1] if path else ""
             if body.status == "done":
                 if action == "start":
-                    run_data = f"stop:{server}:{path}"
-                    markup = InlineKeyboardMarkup([[
-                        InlineKeyboardButton("Stop", callback_data=run_data)
-                    ]]) if len(run_data) <= 64 else None
-                    await notify_callback(
-                        f"*Started* `{server}` / `{name}`",
-                        reply_markup=markup)
+                    from server.database import get_session_by_path
+                    sess = await get_session_by_path(db, server, path)
+                    session_url = sess["session_url"] if sess and sess["session_url"] else None
+                    session_id = sess["session_id"] if sess and sess["session_id"] else None
+
+                    stop_data = f"stop:{server}:{path}"
+                    btns = []
+                    if len(stop_data) <= 64:
+                        btns.append(InlineKeyboardButton("Stop", callback_data=stop_data))
+                    if session_url:
+                        btns.append(InlineKeyboardButton("Open", url=session_url))
+                    markup = InlineKeyboardMarkup([btns]) if btns else None
+
+                    msg = f"*Started* `{server}` / `{name}`"
+                    if session_id:
+                        msg += f"\nID: `{session_id}`"
+                    if session_url:
+                        msg += f"\n[Open Session]({session_url})"
+                    await notify_callback(msg, reply_markup=markup)
                 elif action == "stop":
                     pass  # stop_missing_sessions에서 알림
                 elif action == "clean":
