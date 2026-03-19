@@ -84,7 +84,7 @@ start_session() {
 
     # 서브셸에서 cd + 실행 (부모 셸 CWD 보호)
     local pid
-    pid=$(cd "$path" && nohup claude $CLAUDE_OPTS --name "$name" > "$PID_DIR/${name}.log" 2>&1 & echo $!)
+    pid=$(cd "$path" && setsid claude $CLAUDE_OPTS --name "$name" > "$PID_DIR/${name}.log" 2>&1 & echo $!)
     if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
         api_call POST "/api/commands/$cmd_id/done" \
             -d '{"status":"failed","error":"cannot start session at path"}'
