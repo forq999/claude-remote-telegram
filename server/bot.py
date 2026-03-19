@@ -1,8 +1,8 @@
 import json
 import logging
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
-    Application, CommandHandler, ContextTypes,
+    Application, CallbackQueryHandler, CommandHandler, ContextTypes,
 )
 
 logger = logging.getLogger(__name__)
@@ -105,6 +105,7 @@ def create_bot(token: str, admin_id: int, db_getter):
             return
 
         lines = []
+        buttons = []
         current_server = None
         for s in sessions:
             if s["server"] != current_server:
@@ -113,10 +114,17 @@ def create_bot(token: str, admin_id: int, db_getter):
                 lines.append(f"\n{current_server}{stale_mark}")
             lines.append(
                 f"  {s['project_name']} ({s['project_path']})")
-            lines.append(
-                f"    /stop {s['server']} {s['project_path']}")
+            callback_data = f"stop:{s['server']}:{s['project_path']}"
+            if len(callback_data) <= 64:
+                buttons.append([InlineKeyboardButton(
+                    f"Stop {s['project_name']}", callback_data=callback_data)])
+            else:
+                buttons.append([InlineKeyboardButton(
+                    f"Stop {s['project_name']}",
+                    callback_data=f"stop:{s['server']}:{s['project_name']}")])
 
-        await update.message.reply_text("\n".join(lines))
+        markup = InlineKeyboardMarkup(buttons) if buttons else None
+        await update.message.reply_text("\n".join(lines), reply_markup=markup)
 
     @admin_only
     async def cmd_servers(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -186,6 +194,27 @@ def create_bot(token: str, admin_id: int, db_getter):
         )
         await update.message.reply_text(text)
 
+    async def callback_stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        query = update.callback_query
+        if query.from_user.id != admin_id:
+            await query.answer("Unauthorized.")
+            return
+        await query.answer()
+        parts = query.data.split(":", 2)
+        if len(parts) != 3 or parts[0] != "stop":
+            return
+        server_name, path_or_name = parts[1], parts[2]
+        from server.database import get_server, create_command
+        db = await db_getter()
+        server = await get_server(db, server_name)
+        if not server:
+            await query.edit_message_text(f"Unknown server: {server_name}")
+            return
+        aliases = json.loads(server["aliases"] or "{}")
+        project_path = resolve_alias(path_or_name, aliases)
+        await create_command(db, server_name, "stop", project_path, {})
+        await query.edit_message_text(f"Queued stop: {server_name} @ {project_path}")
+
     app = Application.builder().token(token).build()
     app.add_handler(CommandHandler("run", cmd_start))
     app.add_handler(CommandHandler("stop", cmd_stop))
@@ -193,5 +222,6 @@ def create_bot(token: str, admin_id: int, db_getter):
     app.add_handler(CommandHandler("servers", cmd_servers))
     app.add_handler(CommandHandler("timeout", cmd_timeout))
     app.add_handler(CommandHandler("help", cmd_help))
+    app.add_handler(CallbackQueryHandler(callback_stop))
 
     return app
