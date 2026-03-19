@@ -37,6 +37,10 @@ class CommandDoneRequest(BaseModel):
     error: str | None = None
 
 
+def path_basename(path: str) -> str:
+    return path.rstrip("/").rsplit("/", 1)[-1] if path else ""
+
+
 def create_api_router(db_getter, api_token: str, notify_callback=None) -> APIRouter:
     router = APIRouter(prefix="/api")
     auth = get_auth_checker(api_token)
@@ -65,7 +69,7 @@ def create_api_router(db_getter, api_token: str, notify_callback=None) -> APIRou
             action = cmd["action"]
             server = cmd["server"]
             path = cmd["project_path"] or ""
-            name = path.rstrip("/").rsplit("/", 1)[-1] if path else ""
+            name = path_basename(path)
             if body.status == "done":
                 if action == "start":
                     from server.database import get_session_by_path
@@ -124,7 +128,7 @@ def create_api_router(db_getter, api_token: str, notify_callback=None) -> APIRou
         if stopped and notify_callback:
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
             for path in stopped:
-                name = path.rstrip("/").rsplit("/", 1)[-1]
+                name = path_basename(path)
                 resume_data = f"resume:{body.server}:{path}"
                 markup = None
                 if len(resume_data) <= 64:

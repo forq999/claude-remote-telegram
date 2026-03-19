@@ -166,7 +166,8 @@ stop_session() {
             log "Stopped session: $name (PID $pid)"
         fi
         rm -f "$pid_file" "$PID_DIR/${name}.cpu" \
-              "$PID_DIR/${name}.active" "$PID_DIR/${name}.path"
+              "$PID_DIR/${name}.active" "$PID_DIR/${name}.path" \
+              "$PID_DIR/${name}.sid" "$PID_DIR/${name}.url"
     fi
     api_call POST "/api/commands/$cmd_id/done" -d '{"status":"done"}'
 }
@@ -182,7 +183,8 @@ stop_all_sessions() {
         local base
         base=$(basename "$pid_file" .pid)
         rm -f "$pid_file" "$PID_DIR/${base}.cpu" \
-              "$PID_DIR/${base}.active" "$PID_DIR/${base}.path"
+              "$PID_DIR/${base}.active" "$PID_DIR/${base}.path" \
+              "$PID_DIR/${base}.sid" "$PID_DIR/${base}.url"
         log "Stopped session: $base"
     done
     api_call POST "/api/commands/$cmd_id/done" -d '{"status":"done"}'
@@ -261,7 +263,8 @@ check_idle_sessions() {
             dead_path=$(cat "$PID_DIR/${name}.path" 2>/dev/null || echo "unknown")
             rm -f "$pid_file" "$PID_DIR/${name}.cpu" \
                   "$PID_DIR/${name}.active" "$PID_DIR/${name}.path" \
-                  "$PID_DIR/${name}.timeout"
+                  "$PID_DIR/${name}.timeout" "$PID_DIR/${name}.sid" \
+                  "$PID_DIR/${name}.url"
             # DB에 stopped 보고
             api_call POST "/api/status" \
                 -d "$(jq -nc --arg s "$SERVER_NAME" \
@@ -297,7 +300,8 @@ check_idle_sessions() {
             kill "$pid" 2>/dev/null || true
             rm -f "$pid_file" "$PID_DIR/${name}.cpu" \
                   "$PID_DIR/${name}.active" "$PID_DIR/${name}.path" \
-                  "$PID_DIR/${name}.timeout"
+                  "$PID_DIR/${name}.timeout" "$PID_DIR/${name}.sid" \
+                  "$PID_DIR/${name}.url"
             # DB에 stopped 보고
             api_call POST "/api/status" \
                 -d "$(jq -nc --arg s "$SERVER_NAME" \

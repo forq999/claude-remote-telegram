@@ -173,6 +173,17 @@ async def get_sessions(db, server=None):
     return await cursor.fetchall()
 
 
+async def stop_all_sessions(db, server):
+    """Bulk-stop all running sessions for a server. Returns count."""
+    now = datetime.now(timezone.utc).isoformat()
+    cursor = await db.execute(
+        "UPDATE sessions SET status='stopped', last_activity=? WHERE server=? AND status='running'",
+        (now, server),
+    )
+    await db.commit()
+    return cursor.rowcount
+
+
 async def stop_missing_sessions(db, server, reported_paths):
     now = datetime.now(timezone.utc).isoformat()
     cursor = await db.execute(
@@ -205,6 +216,7 @@ async def get_stale_servers(db, stale_threshold_seconds=120):
             diff = (now - hb).total_seconds()
             if diff > stale_threshold_seconds:
                 # 2분 초과 → 서버 + 세션 삭제
+                stale_servers.append(s["name"])
                 await db.execute("DELETE FROM sessions WHERE server=?", (s["name"],))
                 await db.execute("DELETE FROM servers WHERE name=?", (s["name"],))
     await db.commit()
