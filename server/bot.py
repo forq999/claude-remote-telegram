@@ -350,7 +350,16 @@ def create_bot(token: str, admin_id: int, db_getter):
                     f"Already running on `{server_name}` / `{project_path}`",
                     parse_mode=ParseMode.MARKDOWN)
                 return
-            # 이전 세션 이름이 있으면 resume 파라미터 전달
+            await create_command(db, server_name, "start", project_path, {})
+            await query.edit_message_text("Starting...")
+
+        elif action == "resume":
+            existing = await get_running_session(db, server_name, project_path)
+            if existing:
+                await query.edit_message_text(
+                    f"Already running on `{server_name}` / `{project_path}`",
+                    parse_mode=ParseMode.MARKDOWN)
+                return
             from server.database import get_session_by_path
             prev = await get_session_by_path(db, server_name, project_path)
             params = {}

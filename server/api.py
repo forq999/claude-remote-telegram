@@ -124,11 +124,14 @@ def create_api_router(db_getter, api_token: str, notify_callback=None) -> APIRou
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
             for path in stopped:
                 name = path.rstrip("/").rsplit("/", 1)[-1]
-                run_data = f"run:{body.server}:{path}"
+                resume_data = f"resume:{body.server}:{path}"
                 markup = None
-                if len(run_data) <= 64:
+                if len(resume_data) <= 64:
                     markup = InlineKeyboardMarkup([[
-                        InlineKeyboardButton("Restart", callback_data=run_data)
+                        InlineKeyboardButton("Resume", callback_data=resume_data),
+                        InlineKeyboardButton("New", callback_data=f"run:{body.server}:{path}")
+                    ] if len(f"run:{body.server}:{path}") <= 64 else [
+                        InlineKeyboardButton("Resume", callback_data=resume_data)
                     ]])
                 await notify_callback(
                     f"*Stopped* `{body.server}` / `{name}`",
