@@ -16,6 +16,29 @@ else
     exit 1
 fi
 
+# --- 자동 업데이트 ---
+SELF="$(readlink -f "$0")"
+UPDATE_CHECK="/tmp/claude-agent-update-check"
+UPDATE_INTERVAL="${UPDATE_INTERVAL:-3600}"
+if [ -n "${AUTO_UPDATE_URL:-}" ]; then
+    last_check=$(stat -c %Y "$UPDATE_CHECK" 2>/dev/null || echo "0")
+    now=$(date +%s)
+    if [ $((now - last_check)) -ge "$UPDATE_INTERVAL" ]; then
+        touch "$UPDATE_CHECK"
+        new_script=$(curl -sf "$AUTO_UPDATE_URL" 2>/dev/null || true)
+        if [ -n "$new_script" ]; then
+            old_hash=$(md5sum "$SELF" | awk '{print $1}')
+            new_hash=$(echo "$new_script" | md5sum | awk '{print $1}')
+            if [ "$old_hash" != "$new_hash" ]; then
+                echo "$new_script" > "$SELF"
+                chmod +x "$SELF"
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] Auto-updated script" >> "${LOG_FILE:-/tmp/claude-agent.log}"
+                exec "$SELF" "$@"
+            fi
+        fi
+    fi
+fi
+
 # --- 동시 실행 방지 ---
 exec 9>/tmp/claude-agent.lock
 flock -n 9 || exit 0
