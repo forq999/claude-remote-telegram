@@ -33,7 +33,7 @@ validate_path() {
     fi
     IFS=',' read -ra PATHS <<< "$ALLOWED_PATHS"
     for allowed in "${PATHS[@]}"; do
-        if [[ "$path" == "$allowed"* ]]; then
+        if [[ "$path" == "$allowed" || "$path" == "$allowed/"* ]]; then
             return 0
         fi
     done
@@ -163,6 +163,7 @@ process_commands() {
                 fi
                 ;;
             timeout)
+                [ -n "$path" ] || continue
                 local new_timeout
                 new_timeout=$(echo "$params" | jq -r '.timeout_seconds // 1800')
                 local name

@@ -31,7 +31,7 @@ def resolve_alias(alias_or_path: str, aliases: dict) -> str:
 def create_bot(token: str, admin_id: int, db_getter):
     def admin_only(func):
         async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
-            if update.effective_user.id != admin_id:
+            if update.effective_user is None or update.effective_user.id != admin_id:
                 await update.message.reply_text("Unauthorized.")
                 return
             return await func(update, context)
@@ -147,7 +147,13 @@ def create_bot(token: str, admin_id: int, db_getter):
                 "Usage: /timeout <minutes> <server> <path|alias>")
             return
 
-        minutes = int(parts[1])
+        try:
+            minutes = int(parts[1])
+            if minutes <= 0:
+                raise ValueError
+        except ValueError:
+            await update.message.reply_text("Minutes must be a positive integer.")
+            return
         server_name = parts[2]
         alias_or_path = " ".join(parts[3:])
 

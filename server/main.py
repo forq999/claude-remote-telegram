@@ -39,3 +39,7 @@ def create_app(app_settings: Settings = None, start_bot: bool = True) -> FastAPI
     app = FastAPI(lifespan=lifespan)
     app.include_router(create_api_router(get_db, s.api_token))
     return app
+
+
+settings = Settings()
+app = create_app(settings)
