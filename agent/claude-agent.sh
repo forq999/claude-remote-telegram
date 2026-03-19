@@ -369,7 +369,7 @@ send_heartbeat
 # --- 자동 업데이트 (종료 직전) ---
 if [ -n "${AUTO_UPDATE_URL:-}" ]; then
     UPDATE_CHECK="/tmp/claude-agent-update-check"
-    UPDATE_INTERVAL="${UPDATE_INTERVAL:-3600}"
+    UPDATE_INTERVAL="${UPDATE_INTERVAL:-86400}"
     last_check=$(stat -c %Y "$UPDATE_CHECK" 2>/dev/null || echo "0")
     now=$(date +%s)
     if [ $((now - last_check)) -ge "$UPDATE_INTERVAL" ]; then
