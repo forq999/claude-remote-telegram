@@ -69,13 +69,19 @@ def create_api_router(db_getter, api_token: str) -> APIRouter:
 
     @router.post("/status")
     async def status_report(body: StatusRequest, _=Depends(auth)):
-        from server.database import upsert_session
+        from server.database import upsert_session, stop_missing_sessions
         db = await db_getter()
+        # 에이전트가 보고한 running 경로 목록
+        reported_paths = set()
         for s in body.sessions:
             await upsert_session(
                 db, body.server, s.project_path, s.project_name,
                 s.pid, s.status,
             )
+            if s.status == "running":
+                reported_paths.add(s.project_path)
+        # DB에 running인데 에이전트가 보고하지 않은 세션 → stopped
+        await stop_missing_sessions(db, body.server, reported_paths)
         return {"ok": True}
 
     return router
