@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from server.config import Settings
 from server.api import create_api_router
+from server.bot import create_bot
 from server.database import init_db
 
 
@@ -17,11 +18,19 @@ def create_app(app_settings: Settings = None, start_bot: bool = True) -> FastAPI
         db_holder["conn"].row_factory = aiosqlite.Row
         await init_db(db_holder["conn"])
 
+        bot_app = None
         if start_bot:
-            pass  # Task 5에서 구현
+            bot_app = create_bot(s.telegram_bot_token, s.telegram_admin_id, get_db)
+            await bot_app.initialize()
+            await bot_app.start()
+            await bot_app.updater.start_polling()
 
         yield
 
+        if bot_app:
+            await bot_app.updater.stop()
+            await bot_app.stop()
+            await bot_app.shutdown()
         await db_holder["conn"].close()
 
     async def get_db():
