@@ -111,11 +111,19 @@ def create_api_router(db_getter, api_token: str, notify_callback=None) -> APIRou
 
     @router.post("/status")
     async def status_report(body: StatusRequest, _=Depends(auth)):
-        from server.database import upsert_session, stop_missing_sessions
+        from server.database import (
+            upsert_session, stop_missing_sessions, get_running_session,
+        )
         db = await db_getter()
         # 에이전트가 보고한 running 경로 목록
         reported_paths = set()
+        agent_stopped = []
         for s in body.sessions:
+            # running→stopped 전환 감지 (upsert 전에 확인)
+            if s.status == "stopped":
+                prev = await get_running_session(db, body.server, s.project_path)
+                if prev:
+                    agent_stopped.append(s.project_path)
             await upsert_session(
                 db, body.server, s.project_path, s.project_name,
                 s.pid, s.status, session_url=s.session_url,
@@ -125,9 +133,10 @@ def create_api_router(db_getter, api_token: str, notify_callback=None) -> APIRou
                 reported_paths.add(s.project_path)
         # DB에 running인데 에이전트가 보고하지 않은 세션 → stopped
         stopped = await stop_missing_sessions(db, body.server, reported_paths)
-        if stopped and notify_callback:
+        all_stopped = stopped + agent_stopped
+        if all_stopped and notify_callback:
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-            for path in stopped:
+            for path in all_stopped:
                 name = path_basename(path)
                 resume_data = f"resume:{body.server}:{path}"
                 markup = None

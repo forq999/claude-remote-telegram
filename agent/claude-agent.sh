@@ -265,12 +265,7 @@ check_idle_sessions() {
                   "$PID_DIR/${name}.active" "$PID_DIR/${name}.path" \
                   "$PID_DIR/${name}.timeout" "$PID_DIR/${name}.sid" \
                   "$PID_DIR/${name}.url"
-            # DB에 stopped 보고
-            api_call POST "/api/status" \
-                -d "$(jq -nc --arg s "$SERVER_NAME" \
-                    --arg pp "$dead_path" --arg pn "$name" \
-                    '{server:$s,sessions:[{project_path:$pp,project_name:$pn,pid:0,status:"stopped",idle_seconds:0}]}')" || true
-            log "Session died: $name (PID $pid) - reported stopped"
+            log "Session died: $name (PID $pid)"
             continue
         fi
 
@@ -302,12 +297,7 @@ check_idle_sessions() {
                   "$PID_DIR/${name}.active" "$PID_DIR/${name}.path" \
                   "$PID_DIR/${name}.timeout" "$PID_DIR/${name}.sid" \
                   "$PID_DIR/${name}.url"
-            # DB에 stopped 보고
-            api_call POST "/api/status" \
-                -d "$(jq -nc --arg s "$SERVER_NAME" \
-                    --arg pp "$timeout_path" --arg pn "$name" \
-                    '{server:$s,sessions:[{project_path:$pp,project_name:$pn,pid:0,status:"stopped",idle_seconds:0}]}')" || true
-            log "Idle timeout ($idle_secs >= $timeout_val): $name (PID $pid) - reported stopped"
+            log "Idle timeout ($idle_secs >= $timeout_val): $name (PID $pid)"
         fi
     done
 }
