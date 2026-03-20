@@ -105,6 +105,12 @@ AUTO_UPDATE_URL="https://raw.githubusercontent.com/forq999/claude-remote-telegra
 UPDATE_INTERVAL=86400
 ```
 
+Manual update:
+
+```bash
+./claude-agent.sh --update
+```
+
 Register in cron (10s interval):
 
 ```bash
@@ -141,7 +147,7 @@ Register in cron (10s interval):
 - **Real-time notifications** — on actual start/stop/fail (not on queue)
 - **Markdown formatting** — clean, readable Telegram messages
 - **Auto-discovery** — servers register on first heartbeat, removed after 2min offline
-- **Auto-update** — agent script self-updates from GitHub (daily, configurable)
+- **Auto-update** — agent script self-updates from GitHub (daily, configurable), or manual update via `--update` flag
 - **Concurrent safety** — `flock` prevents overlapping cron execution
 - **Path validation** — prefix matching, traversal prevention, shell metachar blocking
 - **Pseudo-TTY** — `script` command provides TTY for Claude Code in cron environment
