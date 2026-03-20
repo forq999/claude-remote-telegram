@@ -115,12 +115,7 @@ Register in cron (10s interval):
 
 ```bash
 # /etc/crontab
-* * * * * username /home/user/claude-agent.sh
-* * * * * username sleep 10 && /home/user/claude-agent.sh
-* * * * * username sleep 20 && /home/user/claude-agent.sh
-* * * * * username sleep 30 && /home/user/claude-agent.sh
-* * * * * username sleep 40 && /home/user/claude-agent.sh
-* * * * * username sleep 50 && /home/user/claude-agent.sh
+* * * * * username for i in 0 10 20 30 40 50; do (sleep $i && /home/user/claude-agent.sh) & done
 ```
 
 ## Telegram Commands
