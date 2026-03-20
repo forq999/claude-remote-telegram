@@ -24,6 +24,40 @@ mkdir -p "$PID_DIR"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE"; }
 
+# --- 업데이트 ---
+do_update() {
+    local quiet="${1:-}"
+    if [ -z "${AUTO_UPDATE_URL:-}" ]; then
+        [ -z "$quiet" ] && echo "AUTO_UPDATE_URL not set in agent.env"
+        return 1
+    fi
+    SELF="$(readlink -f "$0")"
+    [ -z "$quiet" ] && echo "Fetching update from $AUTO_UPDATE_URL ..."
+    local new_script
+    new_script=$(curl -sf "$AUTO_UPDATE_URL" 2>/dev/null || true)
+    if [ -z "$new_script" ]; then
+        [ -z "$quiet" ] && echo "Failed to fetch update"
+        return 1
+    fi
+    local old_hash new_hash
+    old_hash=$(md5sum "$SELF" | awk '{print $1}')
+    new_hash=$(echo "$new_script" | md5sum | awk '{print $1}')
+    if [ "$old_hash" = "$new_hash" ]; then
+        [ -z "$quiet" ] && echo "Already up to date"
+        return 0
+    fi
+    echo "$new_script" > "$SELF"
+    chmod +x "$SELF"
+    [ -z "$quiet" ] && echo "Updated successfully"
+    log "Script updated"
+    return 0
+}
+
+# --- CLI 플래그 처리 ---
+case "${1:-}" in
+    --update) do_update; exit $? ;;
+esac
+
 # --- 경로 검증 ---
 validate_path() {
     local path="$1"
@@ -368,17 +402,7 @@ if [ -n "${AUTO_UPDATE_URL:-}" ]; then
     now=$(date +%s)
     if [ $((now - last_check)) -ge "$UPDATE_INTERVAL" ]; then
         touch "$UPDATE_CHECK"
-        SELF="$(readlink -f "$0")"
-        new_script=$(curl -sf "$AUTO_UPDATE_URL" 2>/dev/null || true)
-        if [ -n "$new_script" ]; then
-            old_hash=$(md5sum "$SELF" | awk '{print $1}')
-            new_hash=$(echo "$new_script" | md5sum | awk '{print $1}')
-            if [ "$old_hash" != "$new_hash" ]; then
-                echo "$new_script" > "$SELF"
-                chmod +x "$SELF"
-                log "Auto-updated script"
-            fi
-        fi
+        do_update quiet || true
     fi
 fi
 
