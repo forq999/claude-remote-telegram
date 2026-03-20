@@ -49,7 +49,11 @@ do_update() {
     echo "$new_script" > "$SELF"
     chmod +x "$SELF"
     [ -z "$quiet" ] && echo "Updated successfully"
-    log "Script updated"
+    if [ -z "$quiet" ]; then
+        log "Manual update applied"
+    else
+        log "Auto-updated script"
+    fi
     return 0
 }
 
