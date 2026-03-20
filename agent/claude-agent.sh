@@ -16,12 +16,6 @@ else
     exit 1
 fi
 
-# --- 동시 실행 방지 ---
-exec 9>/tmp/claude-agent.lock
-flock -n 9 || exit 0
-
-mkdir -p "$PID_DIR"
-
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE"; }
 
 # --- 업데이트 ---
@@ -57,10 +51,16 @@ do_update() {
     return 0
 }
 
-# --- CLI 플래그 처리 ---
+# --- CLI 플래그 처리 (락 불필요) ---
 case "${1:-}" in
     --update) do_update; exit $? ;;
 esac
+
+# --- 동시 실행 방지 ---
+exec 9>/tmp/claude-agent.lock
+flock -n 9 || exit 0
+
+mkdir -p "$PID_DIR"
 
 # --- 경로 검증 ---
 validate_path() {
