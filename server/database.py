@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS servers (
     name TEXT PRIMARY KEY,
     allowed_paths TEXT DEFAULT '[]',
     aliases TEXT DEFAULT '{}',
-    last_heartbeat TIMESTAMP
+    last_heartbeat TIMESTAMP,
+    registered_at TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS commands (
@@ -44,9 +45,14 @@ CREATE TABLE IF NOT EXISTS sessions (
 async def init_db(db: aiosqlite.Connection):
     await db.executescript(SCHEMA)
     # 마이그레이션
-    for col in ["session_url TEXT DEFAULT ''", "session_id TEXT DEFAULT ''"]:
+    migrations = [
+        ("sessions", "session_url TEXT DEFAULT ''"),
+        ("sessions", "session_id TEXT DEFAULT ''"),
+        ("servers", "registered_at TIMESTAMP"),
+    ]
+    for table, col in migrations:
         try:
-            await db.execute(f"ALTER TABLE sessions ADD COLUMN {col}")
+            await db.execute(f"ALTER TABLE {table} ADD COLUMN {col}")
         except Exception:
             pass
     await db.commit()
@@ -55,13 +61,13 @@ async def init_db(db: aiosqlite.Connection):
 async def upsert_server(db, name, allowed_paths, aliases):
     now = datetime.now(timezone.utc).isoformat()
     await db.execute(
-        """INSERT INTO servers (name, allowed_paths, aliases, last_heartbeat)
-           VALUES (?, ?, ?, ?)
+        """INSERT INTO servers (name, allowed_paths, aliases, last_heartbeat, registered_at)
+           VALUES (?, ?, ?, ?, ?)
            ON CONFLICT(name) DO UPDATE SET
              allowed_paths=excluded.allowed_paths,
              aliases=excluded.aliases,
              last_heartbeat=excluded.last_heartbeat""",
-        (name, json.dumps(allowed_paths), json.dumps(aliases), now),
+        (name, json.dumps(allowed_paths), json.dumps(aliases), now, now),
     )
     await db.commit()
 

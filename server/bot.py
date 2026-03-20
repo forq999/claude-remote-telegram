@@ -209,13 +209,21 @@ def create_bot(token: str, admin_id: int, db_getter):
                 hb_ago = int((now - hb).total_seconds())
                 hb_text = f" | {fmt_duration(hb_ago)} ago"
 
+            # 업타임
+            uptime_text = ""
+            if not is_stale and s["registered_at"]:
+                reg = datetime.fromisoformat(s["registered_at"])
+                if reg.tzinfo is None:
+                    reg = reg.replace(tzinfo=timezone.utc)
+                uptime_text = f" | uptime {fmt_duration(int((now - reg).total_seconds()))}"
+
             # 활성 세션 수
             sessions = await get_sessions(db, s["name"])
             session_count = len(sessions)
             session_text = f"{session_count} active" if session_count > 0 else "no sessions"
 
             lines.append(f"[{icon}] *{s['name']}* ({status})")
-            lines.append(f"    {session_text}{hb_text}")
+            lines.append(f"    {session_text}{hb_text}{uptime_text}")
 
             aliases = json.loads(s["aliases"] or "{}")
             if aliases:
