@@ -366,7 +366,7 @@ report_status() {
 
     api_call POST "/api/status" \
         -d "$(jq -nc --arg s "$SERVER_NAME" --argjson sess "$sessions" \
-               '{server:$s,sessions:$sess}')" || true
+               '{server:$s,sessions:$sess}')" > /dev/null || true
 }
 
 # --- Heartbeat ---
@@ -388,7 +388,7 @@ send_heartbeat() {
     api_call POST "/api/heartbeat" \
         -d "$(jq -nc --arg s "$SERVER_NAME" --argjson p "$paths_json" \
                --argjson a "$aliases_json" \
-               '{server:$s,allowed_paths:$p,aliases:$a}')" || true
+               '{server:$s,allowed_paths:$p,aliases:$a}')" > /dev/null || true
 }
 
 # === 메인 실행 ===
