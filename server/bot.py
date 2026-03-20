@@ -193,43 +193,37 @@ def create_bot(token: str, admin_id: int, db_getter):
             return
 
         now = datetime.now(timezone.utc)
-        lines = ["*Servers*\n"]
+        lines = []
         buttons = []
         for s in servers:
             is_stale = s["name"] in stale
-            icon = "+" if not is_stale else "-"
             status = "online" if not is_stale else "offline"
 
-            # 마지막 heartbeat
-            hb_text = ""
-            if s["last_heartbeat"]:
-                hb = datetime.fromisoformat(s["last_heartbeat"])
-                if hb.tzinfo is None:
-                    hb = hb.replace(tzinfo=timezone.utc)
-                hb_ago = int((now - hb).total_seconds())
-                hb_text = f" | {fmt_duration(hb_ago)} ago"
+            lines.append(f"*{s['name']}*")
+
+            # 정보 조각 모으기
+            info = []
 
             # 업타임
-            uptime_text = ""
             if not is_stale and s["registered_at"]:
                 reg = datetime.fromisoformat(s["registered_at"])
                 if reg.tzinfo is None:
                     reg = reg.replace(tzinfo=timezone.utc)
-                uptime_text = f" | uptime {fmt_duration(int((now - reg).total_seconds()))}"
+                info.append(f"uptime {fmt_duration(int((now - reg).total_seconds()))}")
 
             # 활성 세션 수
             sessions = await get_sessions(db, s["name"])
             session_count = len(sessions)
-            session_text = f"{session_count} active" if session_count > 0 else "no sessions"
+            info.append(f"{session_count} active" if session_count > 0 else "no sessions")
 
-            lines.append(f"[{icon}] *{s['name']}* ({status})")
-            lines.append(f"    {session_text}{hb_text}{uptime_text}")
+            if info:
+                lines.append(f"  {' · '.join(info)}")
 
+            # alias 각 줄에 표시
             aliases = json.loads(s["aliases"] or "{}")
             if aliases:
-                lines.append("    Aliases:")
-                for k, v in aliases.items():
-                    lines.append(f"      `{k}` -> `{v}`")
+                for k in aliases:
+                    lines.append(f"  📂 `{k}`")
                     run_data = f"run:{s['name']}:{k}"
                     if len(run_data) <= 64:
                         buttons.append([InlineKeyboardButton(

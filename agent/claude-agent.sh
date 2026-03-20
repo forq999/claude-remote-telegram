@@ -136,6 +136,9 @@ start_session() {
         log "New session: $session_name"
     fi
 
+    # 경로가 없으면 생성 (validate_path 통과 후이므로 allowed 범위 내)
+    [ -d "$path" ] || mkdir -p "$path"
+
     # script으로 TTY 제공
     (cd "$path" && script -qefc "claude $CLAUDE_OPTS $session_opt" "$PID_DIR/${name}.log" < /dev/null > /dev/null 2>&1) 9>&- &
     sleep 1
