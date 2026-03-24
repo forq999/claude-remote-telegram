@@ -95,7 +95,7 @@ SERVER_NAME="my-server"
 BOT_API_URL="http://your-bot-server:8443"
 API_TOKEN="your-shared-secret"
 DEFAULT_TIMEOUT=1800
-ALLOWED_PATHS="/home/user/projects"
+ALLOWED_PATH="/home/user/projects"
 ALIASES="front=/home/user/projects/frontend,api=/home/user/projects/backend"
 PID_DIR="/tmp/claude-sessions"
 LOG_FILE="/tmp/claude-agent.log"
@@ -122,7 +122,7 @@ Register in cron (10s interval):
 
 | Command | Description |
 |---------|-------------|
-| `/run <server> <path\|alias>` | Start a new remote session |
+| `/run <server> <path\|alias>` | Start a new remote session (relative path resolved from ALLOWED_PATH) |
 | `/stop <server> [path\|alias]` | Stop session (omit path for all) |
 | `/status [server]` | Show active sessions with uptime, idle status, session link |
 | `/servers` | List registered servers, aliases, and run buttons |
@@ -134,6 +134,7 @@ Register in cron (10s interval):
 
 - **Multi-server, multi-project** session management
 - **Path aliases** for quick access (`/run my-server front` instead of full path)
+- **Relative paths** — `/run my-server myapp` resolves to `ALLOWED_PATH/myapp`
 - **Auto-shutdown** on idle (configurable timeout, default 30min)
 - **Session resume** — restart button resumes previous conversation via `--resume`
 - **Session ID** — each session gets a unique name (`server_project_id`) for resume
@@ -144,7 +145,7 @@ Register in cron (10s interval):
 - **Auto-discovery** — servers register on first heartbeat, removed after 2min offline
 - **Auto-update** — agent script self-updates from GitHub (daily, configurable), or manual update via `--update` flag
 - **Concurrent safety** — `flock` prevents overlapping cron execution
-- **Path validation** — prefix matching, traversal prevention, shell metachar blocking
+- **Path validation** — single ALLOWED_PATH prefix, traversal prevention, shell metachar blocking
 - **Pseudo-TTY** — `script` command provides TTY for Claude Code in cron environment
 
 ## Session Lifecycle

@@ -25,8 +25,12 @@ def parse_stop_command(text: str):
     return server, path
 
 
-def resolve_alias(alias_or_path: str, aliases: dict) -> str:
-    return aliases.get(alias_or_path, alias_or_path)
+def resolve_path(alias_or_path: str, aliases: dict, allowed_path: str) -> str:
+    path = aliases.get(alias_or_path, alias_or_path)
+    prefix = allowed_path.rstrip("/")
+    if prefix and not path.startswith(f"{prefix}/") and path != prefix:
+        path = f"{prefix}/{path.lstrip('/')}"
+    return path
 
 
 def fmt_duration(seconds):
@@ -68,7 +72,8 @@ def create_bot(token: str, admin_id: int, db_getter):
             return
 
         aliases = json.loads(server["aliases"] or "{}")
-        project_path = resolve_alias(alias_or_path, aliases)
+        allowed_path = server["allowed_path"] or ""
+        project_path = resolve_path(alias_or_path, aliases, allowed_path)
 
         existing = await get_running_session(db, server_name, project_path)
         if existing:
@@ -97,7 +102,8 @@ def create_bot(token: str, admin_id: int, db_getter):
             return
 
         aliases = json.loads(server["aliases"] or "{}")
-        project_path = resolve_alias(alias_or_path, aliases) if alias_or_path else None
+        allowed_path = server["allowed_path"] or ""
+        project_path = resolve_path(alias_or_path, aliases, allowed_path) if alias_or_path else None
 
         await create_command(db, server_name, "stop", project_path, {})
 
@@ -218,6 +224,11 @@ def create_bot(token: str, admin_id: int, db_getter):
 
             if info:
                 lines.append(f"  {' · '.join(info)}")
+
+            # allowed_path 표시
+            allowed_path = s["allowed_path"] or ""
+            if allowed_path:
+                lines.append(f"  path: `{allowed_path}`")
 
             # alias 각 줄에 표시
             aliases = json.loads(s["aliases"] or "{}")

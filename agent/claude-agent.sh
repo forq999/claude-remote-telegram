@@ -73,14 +73,11 @@ validate_path() {
         log "REJECTED: path traversal in path: $path"
         return 1
     fi
-    IFS=',' read -ra PATHS <<< "$ALLOWED_PATHS"
-    for allowed in "${PATHS[@]}"; do
-        allowed="${allowed%/}"
-        if [[ "$path" == "$allowed" || "$path" == "$allowed/"* ]]; then
-            return 0
-        fi
-    done
-    log "REJECTED: path not in ALLOWED_PATHS: $path"
+    local allowed="${ALLOWED_PATH%/}"
+    if [[ "$path" == "$allowed" || "$path" == "$allowed/"* ]]; then
+        return 0
+    fi
+    log "REJECTED: path not in ALLOWED_PATH: $path"
     return 1
 }
 
@@ -374,12 +371,7 @@ report_status() {
 
 # --- Heartbeat ---
 send_heartbeat() {
-    local paths_json aliases_json
-
-    IFS=',' read -ra PATHS <<< "$ALLOWED_PATHS"
-    paths_json=$(printf '%s\n' "${PATHS[@]}" | jq -R . | jq -sc .)
-
-    aliases_json="{}"
+    local aliases_json="{}"
     if [ -n "${ALIASES:-}" ]; then
         IFS=',' read -ra ALIAS_PAIRS <<< "$ALIASES"
         for pair in "${ALIAS_PAIRS[@]}"; do
@@ -389,9 +381,9 @@ send_heartbeat() {
     fi
 
     api_call POST "/api/heartbeat" \
-        -d "$(jq -nc --arg s "$SERVER_NAME" --argjson p "$paths_json" \
+        -d "$(jq -nc --arg s "$SERVER_NAME" --arg p "$ALLOWED_PATH" \
                --argjson a "$aliases_json" \
-               '{server:$s,allowed_paths:$p,aliases:$a}')" > /dev/null || true
+               '{server:$s,allowed_path:$p,aliases:$a}')" > /dev/null || true
 }
 
 # === 메인 실행 ===

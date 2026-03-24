@@ -7,7 +7,7 @@ import aiosqlite
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS servers (
     name TEXT PRIMARY KEY,
-    allowed_paths TEXT DEFAULT '[]',
+    allowed_path TEXT DEFAULT '',
     aliases TEXT DEFAULT '{}',
     last_heartbeat TIMESTAMP,
     registered_at TIMESTAMP
@@ -49,6 +49,7 @@ async def init_db(db: aiosqlite.Connection):
         ("sessions", "session_url TEXT DEFAULT ''"),
         ("sessions", "session_id TEXT DEFAULT ''"),
         ("servers", "registered_at TIMESTAMP"),
+        ("servers", "allowed_path TEXT DEFAULT ''"),
     ]
     for table, col in migrations:
         try:
@@ -58,16 +59,16 @@ async def init_db(db: aiosqlite.Connection):
     await db.commit()
 
 
-async def upsert_server(db, name, allowed_paths, aliases):
+async def upsert_server(db, name, allowed_path, aliases):
     now = datetime.now(timezone.utc).isoformat()
     await db.execute(
-        """INSERT INTO servers (name, allowed_paths, aliases, last_heartbeat, registered_at)
+        """INSERT INTO servers (name, allowed_path, aliases, last_heartbeat, registered_at)
            VALUES (?, ?, ?, ?, ?)
            ON CONFLICT(name) DO UPDATE SET
-             allowed_paths=excluded.allowed_paths,
+             allowed_path=excluded.allowed_path,
              aliases=excluded.aliases,
              last_heartbeat=excluded.last_heartbeat""",
-        (name, json.dumps(allowed_paths), json.dumps(aliases), now, now),
+        (name, allowed_path, json.dumps(aliases), now, now),
     )
     await db.commit()
 

@@ -13,7 +13,8 @@ def get_auth_checker(api_token: str):
 
 class HeartbeatRequest(BaseModel):
     server: str
-    allowed_paths: list[str]
+    allowed_path: str = ""
+    allowed_paths: list[str] | None = None  # deprecated, 하위호환용
     aliases: dict[str, str]
 
 
@@ -105,7 +106,8 @@ def create_api_router(db_getter, api_token: str, notify_callback=None) -> APIRou
     async def heartbeat(body: HeartbeatRequest, _=Depends(auth)):
         from server.database import upsert_server, get_stale_servers
         db = await db_getter()
-        await upsert_server(db, body.server, body.allowed_paths, body.aliases)
+        path = body.allowed_path or (body.allowed_paths[0] if body.allowed_paths else "")
+        await upsert_server(db, body.server, path, body.aliases)
         await get_stale_servers(db)
         return {"ok": True}
 

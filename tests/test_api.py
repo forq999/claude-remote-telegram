@@ -46,7 +46,7 @@ async def test_claim_unauthorized(client):
 async def test_heartbeat_registers_server(client, auth_headers):
     resp = await client.post("/api/heartbeat", headers=auth_headers, json={
         "server": "srv-a",
-        "allowed_paths": ["/home/proj"],
+        "allowed_path": "/home/proj",
         "aliases": {"front": "/home/proj/fe"},
     })
     assert resp.status_code == 200
@@ -55,7 +55,7 @@ async def test_heartbeat_registers_server(client, auth_headers):
 @pytest.mark.asyncio
 async def test_status_report(client, auth_headers):
     await client.post("/api/heartbeat", headers=auth_headers, json={
-        "server": "srv-a", "allowed_paths": [], "aliases": {},
+        "server": "srv-a", "allowed_path": "", "aliases": {},
     })
     resp = await client.post("/api/status", headers=auth_headers, json={
         "server": "srv-a",
