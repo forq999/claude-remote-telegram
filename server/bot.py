@@ -272,7 +272,8 @@ def create_bot(token: str, admin_id: int, db_getter):
             return
 
         aliases = json.loads(server["aliases"] or "{}")
-        project_path = resolve_alias(alias_or_path, aliases)
+        allowed_path = server["allowed_path"] or ""
+        project_path = resolve_path(alias_or_path, aliases, allowed_path)
 
         await create_command(
             db, server_name, "timeout", project_path,
@@ -377,7 +378,8 @@ def create_bot(token: str, admin_id: int, db_getter):
         if not path_or_name:
             return
         aliases = json.loads(server["aliases"] or "{}")
-        project_path = resolve_alias(path_or_name, aliases)
+        allowed_path = server["allowed_path"] or ""
+        project_path = resolve_path(path_or_name, aliases, allowed_path)
 
         if action == "stop":
             await create_command(db, server_name, "stop", project_path, {})
