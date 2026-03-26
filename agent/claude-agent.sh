@@ -16,6 +16,8 @@ else
     exit 1
 fi
 
+# ALLOWED_PATHS → ALLOWED_PATH 하위호환
+ALLOWED_PATH="${ALLOWED_PATH:-${ALLOWED_PATHS:-}}"
 LOG_FILE="${LOG_FILE:-$SCRIPT_DIR/claude-agent.log}"
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE"; }
 
