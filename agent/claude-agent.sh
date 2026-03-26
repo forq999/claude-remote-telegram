@@ -384,7 +384,7 @@ send_heartbeat() {
     fi
 
     api_call POST "/api/heartbeat" \
-        -d "$(jq -nc --arg s "$SERVER_NAME" --arg p "$ALLOWED_PATH" \
+        -d "$(jq -nc --arg s "$SERVER_NAME" --arg p "${ALLOWED_PATH:-}" \
                --argjson a "$aliases_json" \
                '{server:$s,allowed_path:$p,aliases:$a}')" > /dev/null || true
 }
