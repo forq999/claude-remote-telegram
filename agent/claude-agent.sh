@@ -126,9 +126,9 @@ start_session() {
         session_opt="--resume $resume_id"
         log "Resuming session: $resume_id"
     else
-        local rand_id
-        rand_id=$(head -c 5 /dev/urandom | xxd -p | cut -c1-5)
-        session_name="${SERVER_NAME}_${name}_${rand_id}"
+        local ts
+        ts=$(date '+%y%m%d_%H-%M-%S')
+        session_name="${SERVER_NAME}_${name}_${ts}"
         session_opt="--name $session_name"
         log "New session: $session_name"
     fi
