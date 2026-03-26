@@ -16,6 +16,7 @@ else
     exit 1
 fi
 
+LOG_FILE="${LOG_FILE:-$SCRIPT_DIR/claude-agent.log}"
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE"; }
 
 # --- 업데이트 ---
@@ -57,9 +58,11 @@ case "${1:-}" in
 esac
 
 # --- 동시 실행 방지 ---
-exec 9>/tmp/claude-agent.lock
+LOCK_FILE="${LOCK_FILE:-$SCRIPT_DIR/claude-agent.lock}"
+exec 9>"$LOCK_FILE"
 flock -n 9 || exit 0
 
+PID_DIR="${PID_DIR:-$SCRIPT_DIR/claude-agent-pids}"
 mkdir -p "$PID_DIR"
 
 # --- 경로 검증 ---
@@ -280,7 +283,7 @@ process_commands() {
                           "$PID_DIR/${cbase}.url"
                     log "Clean: killed $cbase (PID $cpid)"
                 done
-                rm -f /tmp/claude-agent.lock
+                rm -f "$LOCK_FILE"
                 api_call POST "/api/commands/$id/done" -d '{"status":"done"}'
                 log "Clean completed"
                 ;;
