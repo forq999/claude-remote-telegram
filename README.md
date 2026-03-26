@@ -97,8 +97,8 @@ API_TOKEN="your-shared-secret"
 DEFAULT_TIMEOUT=1800
 ALLOWED_PATH="/home/user/projects"
 ALIASES="front=/home/user/projects/frontend,api=/home/user/projects/backend"
-PID_DIR="/tmp/claude-sessions"
-LOG_FILE="/tmp/claude-agent.log"
+PID_DIR=""   # default: script directory (claude-agent-pids/)
+LOG_FILE=""  # default: script directory (claude-agent.log)
 
 # Auto-update (optional)
 AUTO_UPDATE_URL="https://raw.githubusercontent.com/forq999/claude-remote-telegram/main/agent/claude-agent.sh"
@@ -137,7 +137,7 @@ Register in cron (10s interval):
 - **Relative paths** — `/run my-server myapp` resolves to `ALLOWED_PATH/myapp`
 - **Auto-shutdown** on idle (configurable timeout, default 30min)
 - **Session resume** — restart button resumes previous conversation via `--resume`
-- **Session ID** — each session gets a unique name (`server_project_id`) for resume
+- **Session ID** — each session gets a unique name (`server_project_yymmdd_HH-MM-SS`) for resume
 - **Inline buttons** — Stop/Resume/New/Open on every notification
 - **Session URL** — clickable link to `claude.ai/code` in status and start notifications
 - **Real-time notifications** — on actual start/stop/fail (not on queue)
@@ -151,14 +151,14 @@ Register in cron (10s interval):
 ## Session Lifecycle
 
 ```
-/run server ssh          -> new session (--name server_ssh_a3f8k)
+/run server ssh          -> new session (--name server_ssh_260326_14-30-05)
                          -> Started notification + [Stop] [Open]
 
 /status                  -> uptime, idle status, session link, [Stop]
 
 Stop button              -> Stopped notification + [Resume] [New]
-  Resume button          -> resumes conversation (--resume server_ssh_a3f8k)
-  New button             -> fresh session (--name server_ssh_b2c9d)
+  Resume button          -> resumes conversation (--resume server_ssh_260326_14-30-05)
+  New button             -> fresh session (--name server_ssh_260326_15-00-12)
 
 /servers                 -> server list + [Run] buttons (always new session)
 
