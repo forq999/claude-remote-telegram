@@ -34,9 +34,12 @@ def resolve_path(alias_or_path: str, aliases: dict, allowed_path: str) -> str:
 
 
 def fmt_duration(seconds):
-    hours, remainder = divmod(seconds, 3600)
+    days, remainder = divmod(seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
     minutes, secs = divmod(remainder, 60)
-    if hours > 0:
+    if days > 0:
+        return f"{days}d {hours}h {minutes}m"
+    elif hours > 0:
         return f"{hours}h {minutes}m"
     elif minutes > 0:
         return f"{minutes}m {secs}s"
