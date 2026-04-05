@@ -318,11 +318,12 @@ check_idle_sessions() {
             timeout_val=$DEFAULT_TIMEOUT
         fi
 
-        local cpu_now cpu_prev
+        local cpu_now cpu_prev has_children
         cpu_now=$(awk '{print $14+$15}' "/proc/$pid/stat" 2>/dev/null || echo "0")
         cpu_prev=$(cat "$PID_DIR/${name}.cpu" 2>/dev/null || echo "0")
+        has_children=$(pgrep -P "$pid" 2>/dev/null | head -1 || true)
 
-        if [ "$cpu_now" != "$cpu_prev" ]; then
+        if [ "$cpu_now" != "$cpu_prev" ] || [ -n "$has_children" ]; then
             echo "$cpu_now" > "$PID_DIR/${name}.cpu"
             touch "$PID_DIR/${name}.active"
         fi
