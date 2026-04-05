@@ -288,22 +288,49 @@ process_commands() {
     done
 }
 
+# --- jsonl 파일 경로 조회 (없으면 빈 문자열) ---
+find_session_jsonl() {
+    local session_path=$1
+    [ -z "$session_path" ] && return
+    local encoded_path
+    encoded_path=$(echo "$session_path" | sed 's|[/_]|-|g')
+    ls -t "$HOME/.claude/projects/$encoded_path"/*.jsonl 2>/dev/null | head -1
+}
+
 # --- 활동 시간 계산 (jsonl mtime 우선, .active 파일 폴백) ---
 # 사용법: get_activity_time <name> <session_path>
 # Claude Code가 모든 이벤트(user/assistant/tool_use/tool_result)를
 # jsonl 파일에 기록하므로 이 파일의 mtime이 가장 신뢰성 있는 활동 지표.
 get_activity_time() {
     local name=$1 session_path=$2
-    if [ -n "$session_path" ]; then
-        local encoded_path jsonl_file
-        encoded_path=$(echo "$session_path" | sed 's|[/_]|-|g')
-        jsonl_file=$(ls -t "$HOME/.claude/projects/$encoded_path"/*.jsonl 2>/dev/null | head -1)
-        if [ -n "$jsonl_file" ] && [ -f "$jsonl_file" ]; then
-            stat -c %Y "$jsonl_file"
-            return
-        fi
+    local jsonl_file
+    jsonl_file=$(find_session_jsonl "$session_path")
+    if [ -n "$jsonl_file" ] && [ -f "$jsonl_file" ]; then
+        stat -c %Y "$jsonl_file"
+        return
     fi
     stat -c %Y "$PID_DIR/${name}.active" 2>/dev/null || echo "0"
+}
+
+# --- CPU 기반 폴백: jsonl 을 찾지 못했을 때 .active 를 CPU 변화로 갱신 ---
+# 안전망: 경로 인코딩 불일치, 파일 권한 문제, 잔존 세션 등 jsonl 탐색
+# 실패 시에도 idle 감지가 동작하도록 기존 CPU 방식을 폴백으로 유지.
+fallback_cpu_touch_active() {
+    local name=$1 pid=$2
+    local work_pid="$pid"
+    # script 래퍼가 추적 중이면 실제 claude 자식의 CPU 를 사용
+    if [ "$(cat /proc/$pid/comm 2>/dev/null)" = "script" ]; then
+        local claude_child
+        claude_child=$(pgrep -P "$pid" -x claude 2>/dev/null | head -1)
+        [ -n "$claude_child" ] && work_pid="$claude_child"
+    fi
+    local cpu_now cpu_prev
+    cpu_now=$(awk '{print $14+$15}' "/proc/$work_pid/stat" 2>/dev/null || echo "0")
+    cpu_prev=$(cat "$PID_DIR/${name}.cpu" 2>/dev/null || echo "0")
+    if [ "$cpu_now" != "$cpu_prev" ]; then
+        echo "$cpu_now" > "$PID_DIR/${name}.cpu"
+        touch "$PID_DIR/${name}.active"
+    fi
 }
 
 # --- Idle 체크 ---
@@ -328,6 +355,13 @@ check_idle_sessions() {
             timeout_val=$(cat "$PID_DIR/${name}.timeout")
         else
             timeout_val=$DEFAULT_TIMEOUT
+        fi
+
+        # jsonl 을 찾지 못한 경우에만 CPU 기반 폴백으로 .active 갱신
+        local jsonl_file
+        jsonl_file=$(find_session_jsonl "$session_path")
+        if [ -z "$jsonl_file" ]; then
+            fallback_cpu_touch_active "$name" "$pid"
         fi
 
         local activity_time now_time idle_secs
