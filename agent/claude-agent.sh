@@ -144,9 +144,9 @@ start_session() {
     # script으로 TTY 제공
     (cd "$path" && script -qefc "claude $CLAUDE_OPTS $session_opt" "$PID_DIR/${name}.log" < /dev/null > /dev/null 2>&1) 9>&- &
     sleep 1
-    # script이 실행한 실제 claude 프로세스 PID 찾기
+    # script이 실행한 실제 claude 프로세스 PID 찾기 (script 래퍼 자체 제외)
     local pid
-    pid=$(pgrep -f "claude.*--remote-control.*$session_name" | head -1)
+    pid=$(pgrep -x claude -a 2>/dev/null | grep -F -- "$session_name" | awk '{print $1}' | head -1)
     if [ -z "$pid" ]; then
         api_call POST "/api/commands/$cmd_id/done" \
             -d '{"status":"failed","error":"cannot start session at path"}'
@@ -318,12 +318,20 @@ check_idle_sessions() {
             timeout_val=$DEFAULT_TIMEOUT
         fi
 
-        local cpu_now cpu_prev has_children
-        cpu_now=$(awk '{print $14+$15}' "/proc/$pid/stat" 2>/dev/null || echo "0")
-        cpu_prev=$(cat "$PID_DIR/${name}.cpu" 2>/dev/null || echo "0")
-        has_children=$(pgrep -P "$pid" 2>/dev/null | head -1 || true)
+        # 구버전 호환: script 래퍼가 추적되고 있으면 실제 claude 프로세스로 이동
+        # (claude 본 프로세스의 CPU 시간이 script보다 훨씬 높은 해상도로 활동을 반영함)
+        local work_pid="$pid"
+        if [ "$(cat /proc/$pid/comm 2>/dev/null)" = "script" ]; then
+            local claude_child
+            claude_child=$(pgrep -P "$pid" -x claude 2>/dev/null | head -1)
+            [ -n "$claude_child" ] && work_pid="$claude_child"
+        fi
 
-        if [ "$cpu_now" != "$cpu_prev" ] || [ -n "$has_children" ]; then
+        local cpu_now cpu_prev
+        cpu_now=$(awk '{print $14+$15}' "/proc/$work_pid/stat" 2>/dev/null || echo "0")
+        cpu_prev=$(cat "$PID_DIR/${name}.cpu" 2>/dev/null || echo "0")
+
+        if [ "$cpu_now" != "$cpu_prev" ]; then
             echo "$cpu_now" > "$PID_DIR/${name}.cpu"
             touch "$PID_DIR/${name}.active"
         fi
