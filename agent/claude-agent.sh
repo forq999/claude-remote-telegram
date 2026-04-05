@@ -157,15 +157,10 @@ start_session() {
     echo "$session_name" > "$PID_DIR/${name}.sid"
     touch "$PID_DIR/${name}.active"
 
-    # 초기 CPU 시간 저장
-    local cpu_time
-    cpu_time=$(awk '{print $14+$15}' "/proc/$pid/stat" 2>/dev/null || echo "0")
-    echo "$cpu_time" > "$PID_DIR/${name}.cpu"
-
     # 세션 URL + UUID 추출 (최대 5초 대기)
     local session_url="" session_id="" wait_count=0
-    # claude 프로젝트 디렉토리 (경로를 -로 변환)
-    local claude_proj_dir="$HOME/.claude/projects/$(echo "$path" | sed 's|^/|-|;s|/|-|g')"
+    # claude 프로젝트 디렉토리 (경로의 / 및 _ 를 - 로 변환)
+    local claude_proj_dir="$HOME/.claude/projects/$(echo "$path" | sed 's|[/_]|-|g')"
     while [ $wait_count -lt 5 ]; do
         # URL from log
         if [ -z "$session_url" ]; then
@@ -293,17 +288,34 @@ process_commands() {
     done
 }
 
+# --- 활동 시간 계산 (jsonl mtime 우선, .active 파일 폴백) ---
+# 사용법: get_activity_time <name> <session_path>
+# Claude Code가 모든 이벤트(user/assistant/tool_use/tool_result)를
+# jsonl 파일에 기록하므로 이 파일의 mtime이 가장 신뢰성 있는 활동 지표.
+get_activity_time() {
+    local name=$1 session_path=$2
+    if [ -n "$session_path" ]; then
+        local encoded_path jsonl_file
+        encoded_path=$(echo "$session_path" | sed 's|[/_]|-|g')
+        jsonl_file=$(ls -t "$HOME/.claude/projects/$encoded_path"/*.jsonl 2>/dev/null | head -1)
+        if [ -n "$jsonl_file" ] && [ -f "$jsonl_file" ]; then
+            stat -c %Y "$jsonl_file"
+            return
+        fi
+    fi
+    stat -c %Y "$PID_DIR/${name}.active" 2>/dev/null || echo "0"
+}
+
 # --- Idle 체크 ---
 check_idle_sessions() {
     for pid_file in "$PID_DIR"/*.pid; do
         [ -f "$pid_file" ] || continue
-        local pid name timeout_val
+        local pid name timeout_val session_path
         pid=$(cat "$pid_file")
         name=$(basename "$pid_file" .pid)
+        session_path=$(cat "$PID_DIR/${name}.path" 2>/dev/null || echo "")
 
         if ! kill -0 "$pid" 2>/dev/null; then
-            local dead_path
-            dead_path=$(cat "$PID_DIR/${name}.path" 2>/dev/null || echo "unknown")
             rm -f "$pid_file" "$PID_DIR/${name}.cpu" \
                   "$PID_DIR/${name}.active" "$PID_DIR/${name}.path" \
                   "$PID_DIR/${name}.timeout" "$PID_DIR/${name}.sid" \
@@ -318,33 +330,20 @@ check_idle_sessions() {
             timeout_val=$DEFAULT_TIMEOUT
         fi
 
-        # 구버전 호환: script 래퍼가 추적되고 있으면 실제 claude 프로세스로 이동
-        # (claude 본 프로세스의 CPU 시간이 script보다 훨씬 높은 해상도로 활동을 반영함)
-        local work_pid="$pid"
-        if [ "$(cat /proc/$pid/comm 2>/dev/null)" = "script" ]; then
-            local claude_child
-            claude_child=$(pgrep -P "$pid" -x claude 2>/dev/null | head -1)
-            [ -n "$claude_child" ] && work_pid="$claude_child"
-        fi
-
-        local cpu_now cpu_prev
-        cpu_now=$(awk '{print $14+$15}' "/proc/$work_pid/stat" 2>/dev/null || echo "0")
-        cpu_prev=$(cat "$PID_DIR/${name}.cpu" 2>/dev/null || echo "0")
-
-        if [ "$cpu_now" != "$cpu_prev" ]; then
-            echo "$cpu_now" > "$PID_DIR/${name}.cpu"
-            touch "$PID_DIR/${name}.active"
-        fi
-
-        local active_time now_time idle_secs
-        active_time=$(stat -c %Y "$PID_DIR/${name}.active" 2>/dev/null || echo "0")
+        local activity_time now_time idle_secs
+        activity_time=$(get_activity_time "$name" "$session_path")
         now_time=$(date +%s)
-        idle_secs=$((now_time - active_time))
+        idle_secs=$((now_time - activity_time))
 
         if [ "$idle_secs" -ge "$timeout_val" ]; then
-            local timeout_path
-            timeout_path=$(cat "$PID_DIR/${name}.path" 2>/dev/null || echo "unknown")
-            kill "$pid" 2>/dev/null || true
+            # 구버전 호환: 추적 PID가 script 래퍼면 실제 claude 자식을 종료
+            local kill_target="$pid"
+            if [ "$(cat /proc/$pid/comm 2>/dev/null)" = "script" ]; then
+                local claude_child
+                claude_child=$(pgrep -P "$pid" -x claude 2>/dev/null | head -1)
+                [ -n "$claude_child" ] && kill_target="$claude_child"
+            fi
+            kill "$kill_target" 2>/dev/null || true
             rm -f "$pid_file" "$PID_DIR/${name}.cpu" \
                   "$PID_DIR/${name}.active" "$PID_DIR/${name}.path" \
                   "$PID_DIR/${name}.timeout" "$PID_DIR/${name}.sid" \
@@ -360,13 +359,13 @@ report_status() {
 
     for pid_file in "$PID_DIR"/*.pid; do
         [ -f "$pid_file" ] || continue
-        local pid name path active_time now_time idle_secs
+        local pid name path activity_time now_time idle_secs
         pid=$(cat "$pid_file")
         name=$(basename "$pid_file" .pid)
         path=$(cat "$PID_DIR/${name}.path" 2>/dev/null || echo "unknown")
-        active_time=$(stat -c %Y "$PID_DIR/${name}.active" 2>/dev/null || echo "0")
+        activity_time=$(get_activity_time "$name" "$path")
         now_time=$(date +%s)
-        idle_secs=$((now_time - active_time))
+        idle_secs=$((now_time - activity_time))
 
         local url sid
         url=$(cat "$PID_DIR/${name}.url" 2>/dev/null || echo "")
