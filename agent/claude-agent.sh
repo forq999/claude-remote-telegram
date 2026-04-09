@@ -141,6 +141,13 @@ start_session() {
     # 경로가 없으면 생성 (validate_path 통과 후이므로 allowed 범위 내)
     [ -d "$path" ] || mkdir -p "$path"
 
+    # 세션 시작 전 기존 jsonl 파일 스냅샷 (새 세션 파일 식별용)
+    local claude_proj_dir="$HOME/.claude/projects/$(echo "$path" | sed 's|[/_]|-|g')"
+    local jsonl_snapshot=""
+    if [ -d "$claude_proj_dir" ]; then
+        jsonl_snapshot=$(ls "$claude_proj_dir"/*.jsonl 2>/dev/null || true)
+    fi
+
     # script으로 TTY 제공
     (cd "$path" && script -qefc "claude $CLAUDE_OPTS $session_opt" "$PID_DIR/${name}.log" < /dev/null > /dev/null 2>&1) 9>&- &
     sleep 1
@@ -154,35 +161,40 @@ start_session() {
     fi
     echo "$pid" > "$pid_file"
     echo "$path" > "$PID_DIR/${name}.path"
-    echo "$session_name" > "$PID_DIR/${name}.sid"
     touch "$PID_DIR/${name}.active"
 
     # 세션 URL + UUID 추출 (최대 5초 대기)
     local session_url="" session_id="" wait_count=0
-    # claude 프로젝트 디렉토리 (경로의 / 및 _ 를 - 로 변환)
-    local claude_proj_dir="$HOME/.claude/projects/$(echo "$path" | sed 's|[/_]|-|g')"
     while [ $wait_count -lt 5 ]; do
         # URL from log
         if [ -z "$session_url" ]; then
             session_url=$(grep -oP 'https://claude\.ai/code/session_[A-Za-z0-9]+' "$PID_DIR/${name}.log" 2>/dev/null || true)
             session_url=$(echo "$session_url" | head -1)
         fi
-        # UUID from .jsonl file (가장 최근 파일)
+        # UUID from new .jsonl file (스냅샷에 없던 새 파일만 식별)
         if [ -z "$session_id" ] && [ -d "$claude_proj_dir" ]; then
-            session_id=$(ls -t "$claude_proj_dir"/*.jsonl 2>/dev/null | head -1 | xargs -r basename | sed 's/\.jsonl//' || true)
+            local f
+            for f in "$claude_proj_dir"/*.jsonl; do
+                [ -f "$f" ] || continue
+                if [ -z "$jsonl_snapshot" ] || ! echo "$jsonl_snapshot" | grep -qxF "$f"; then
+                    session_id=$(basename "$f" .jsonl)
+                    break
+                fi
+            done
         fi
         [ -n "$session_url" ] && [ -n "$session_id" ] && break
         sleep 1
         wait_count=$((wait_count + 1))
     done
     [ -n "$session_url" ] && echo "$session_url" > "$PID_DIR/${name}.url"
-    [ -n "$session_id" ] && echo "$session_id" > "$PID_DIR/${name}.sid"
+    # UUID가 있으면 UUID를, 없으면 session_name을 fallback으로 기록
+    echo "${session_id:-$session_name}" > "$PID_DIR/${name}.sid"
     log "Session URL: ${session_url:-none} (ID: ${session_name})"
 
     # done 전에 세션 정보를 먼저 DB에 보고
     api_call POST "/api/status" \
         -d "$(jq -nc --arg s "$SERVER_NAME" --arg pp "$path" --arg pn "$name" \
-            --argjson pid "$pid" --arg url "${session_url:-}" --arg sid "$session_name" \
+            --argjson pid "$pid" --arg url "${session_url:-}" --arg sid "${session_id:-$session_name}" \
             '{server:$s,sessions:[{project_path:$pp,project_name:$pn,pid:$pid,status:"running",idle_seconds:0,session_url:$url,session_id:$sid}]}')" || true
 
     log "Started session: $name (PID $pid) at $path"
@@ -297,19 +309,26 @@ find_session_jsonl() {
     ls -t "$HOME/.claude/projects/$encoded_path"/*.jsonl 2>/dev/null | head -1
 }
 
-# --- 활동 시간 계산 (jsonl mtime 우선, .active 파일 폴백) ---
+# --- 활동 시간 계산 (jsonl mtime과 .active 중 최근 값) ---
 # 사용법: get_activity_time <name> <session_path>
-# Claude Code가 모든 이벤트(user/assistant/tool_use/tool_result)를
-# jsonl 파일에 기록하므로 이 파일의 mtime이 가장 신뢰성 있는 활동 지표.
+# Claude Code가 모든 이벤트를 jsonl에 기록하므로 mtime이 신뢰성 있는 지표이나,
+# resume 직후에는 jsonl mtime이 오래되어 있으므로 .active와 비교하여 최근 값을 사용.
 get_activity_time() {
     local name=$1 session_path=$2
+    local jsonl_time=0 active_time=0
+
     local jsonl_file
     jsonl_file=$(find_session_jsonl "$session_path")
     if [ -n "$jsonl_file" ] && [ -f "$jsonl_file" ]; then
-        stat -c %Y "$jsonl_file"
-        return
+        jsonl_time=$(stat -c %Y "$jsonl_file")
     fi
-    stat -c %Y "$PID_DIR/${name}.active" 2>/dev/null || echo "0"
+    active_time=$(stat -c %Y "$PID_DIR/${name}.active" 2>/dev/null || echo "0")
+
+    if [ "$jsonl_time" -ge "$active_time" ]; then
+        echo "$jsonl_time"
+    else
+        echo "$active_time"
+    fi
 }
 
 # --- CPU 기반 폴백: jsonl 을 찾지 못했을 때 .active 를 CPU 변화로 갱신 ---
@@ -404,6 +423,17 @@ report_status() {
         local url sid
         url=$(cat "$PID_DIR/${name}.url" 2>/dev/null || echo "")
         sid=$(cat "$PID_DIR/${name}.sid" 2>/dev/null || echo "")
+
+        # .sid가 UUID가 아닌 session_name이면 jsonl에서 실제 UUID 갱신 시도
+        if [ -n "$sid" ] && [[ "$sid" == *"_"* ]]; then
+            local resolved_id
+            resolved_id=$(find_session_jsonl "$path")
+            if [ -n "$resolved_id" ]; then
+                resolved_id=$(basename "$resolved_id" .jsonl)
+                echo "$resolved_id" > "$PID_DIR/${name}.sid"
+                sid="$resolved_id"
+            fi
+        fi
 
         sessions=$(echo "$sessions" | jq -c \
             --arg pp "$path" --arg pn "$name" --argjson pid "$pid" \
