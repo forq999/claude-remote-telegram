@@ -169,11 +169,13 @@ def create_bot(token: str, admin_id: int, db_getter):
             elif idle_text:
                 status_line += f" | Idle: {idle_text}"
             session_url = s["session_url"] if s["session_url"] else None
-            session_id = s["session_id"] if s["session_id"] else None
+            # display_name 우선 (사람이 읽기 쉬운 세션 이름, 예: bk-test_proj_YYMMDD_HH-MM-SS),
+            # 없으면 session_id (UUID) 폴백
+            label = (s["display_name"] if s["display_name"] else s["session_id"]) or None
             if session_url:
                 status_line += f"\n    [Open Session]({session_url})"
-            if session_id:
-                status_line += f"\n    ID: `{session_id}`"
+            if label:
+                status_line += f"\n    ID: `{label}`"
             lines.append(status_line)
 
             callback_data = f"stop:{s['server']}:{s['project_path']}"

@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     last_activity TIMESTAMP,
     session_url TEXT DEFAULT '',
     session_id TEXT DEFAULT '',
+    display_name TEXT DEFAULT '',
     UNIQUE(server, project_path)
 );
 """
@@ -44,10 +45,11 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 async def init_db(db: aiosqlite.Connection):
     await db.executescript(SCHEMA)
-    # 마이그레이션
+    # 마이그레이션 (ALTER TABLE ADD COLUMN — 이미 있으면 예외 무시)
     migrations = [
         ("sessions", "session_url TEXT DEFAULT ''"),
         ("sessions", "session_id TEXT DEFAULT ''"),
+        ("sessions", "display_name TEXT DEFAULT ''"),
         ("servers", "registered_at TIMESTAMP"),
         ("servers", "allowed_path TEXT DEFAULT ''"),
     ]
@@ -56,6 +58,21 @@ async def init_db(db: aiosqlite.Connection):
             await db.execute(f"ALTER TABLE {table} ADD COLUMN {col}")
         except Exception:
             pass
+    # 백필: 기존 행들 중 session_id 가 UUID 형태가 아닌 것(= session_name 또는
+    # 구 버그로 잘못 저장된 값) 을 display_name 으로 복사.
+    # display_name 이 비어있을 때만 채우므로 재실행해도 멱등.
+    # UUID 판정: 영숫자/대시로만 구성 + 36자 + 4-2-2-2-6 하이픈 포맷.
+    #   SQLite LIKE 로 근사 매칭: "________-____-____-____-____________"
+    await db.execute(
+        """UPDATE sessions
+           SET display_name = session_id
+           WHERE display_name = ''
+             AND session_id != ''
+             AND NOT (
+                 length(session_id) = 36
+                 AND session_id LIKE '________-____-____-____-____________'
+             )"""
+    )
     await db.commit()
 
 
@@ -132,12 +149,14 @@ async def complete_command(db, command_id, status, error=None):
 
 
 async def upsert_session(db, server, project_path, project_name, pid, status,
-                         idle_timeout=1800, session_url="", session_id=""):
+                         idle_timeout=1800, session_url="", session_id="",
+                         display_name=""):
     now = datetime.now(timezone.utc).isoformat()
     await db.execute(
         """INSERT INTO sessions (server, project_path, project_name, pid, status,
-                                idle_timeout, started_at, last_activity, session_url, session_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                idle_timeout, started_at, last_activity, session_url,
+                                session_id, display_name)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(server, project_path) DO UPDATE SET
              pid=excluded.pid, status=excluded.status,
              project_name=excluded.project_name,
@@ -145,8 +164,10 @@ async def upsert_session(db, server, project_path, project_name, pid, status,
              idle_timeout=excluded.idle_timeout,
              started_at=CASE WHEN sessions.status='stopped' THEN excluded.started_at ELSE sessions.started_at END,
              session_url=CASE WHEN excluded.session_url != '' THEN excluded.session_url ELSE sessions.session_url END,
-             session_id=CASE WHEN excluded.session_id != '' THEN excluded.session_id ELSE sessions.session_id END""",
-        (server, project_path, project_name, pid, status, idle_timeout, now, now, session_url, session_id),
+             session_id=CASE WHEN excluded.session_id != '' THEN excluded.session_id ELSE sessions.session_id END,
+             display_name=CASE WHEN sessions.display_name = '' AND excluded.display_name != '' THEN excluded.display_name ELSE sessions.display_name END""",
+        (server, project_path, project_name, pid, status, idle_timeout, now, now,
+         session_url, session_id, display_name),
     )
     await db.commit()
 

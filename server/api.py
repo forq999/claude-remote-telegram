@@ -1,7 +1,17 @@
 import json
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel
+
+
+# Claude Code jsonl 파일명(=agent 의 session_id) 포맷. 이 형태가 아닌 값은
+# 에이전트가 일시적으로 보고하는 session_name (예: bk-test_proj_YYMMDD_HH-MM-SS)
+# 으로 간주하고 display_name 컬럼에 복사한다.
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
 
 
 def get_auth_checker(api_token: str):
@@ -76,7 +86,11 @@ def create_api_router(db_getter, api_token: str, notify_callback=None) -> APIRou
                     from server.database import get_session_by_path
                     sess = await get_session_by_path(db, server, path)
                     session_url = sess["session_url"] if sess and sess["session_url"] else None
-                    session_id = sess["session_id"] if sess and sess["session_id"] else None
+                    # display_name 우선 (사람이 읽기 쉬운 이름), 없으면 session_id(UUID) 폴백
+                    label = None
+                    if sess:
+                        label = (sess["display_name"] if sess["display_name"]
+                                 else sess["session_id"]) or None
 
                     stop_data = f"stop:{server}:{path}"
                     btns = []
@@ -87,8 +101,8 @@ def create_api_router(db_getter, api_token: str, notify_callback=None) -> APIRou
                     markup = InlineKeyboardMarkup([btns]) if btns else None
 
                     msg = f"*Started* `{server}` / `{name}`"
-                    if session_id:
-                        msg += f"\nID: `{session_id}`"
+                    if label:
+                        msg += f"\nID: `{label}`"
                     if session_url:
                         msg += f"\n[Open Session]({session_url})"
                     await notify_callback(msg, reply_markup=markup)
@@ -126,10 +140,16 @@ def create_api_router(db_getter, api_token: str, notify_callback=None) -> APIRou
                 prev = await get_running_session(db, body.server, s.project_path)
                 if prev:
                     agent_stopped.append(s.project_path)
+            # session_id 가 아직 UUID 가 아니면 (에이전트의 초기 session_name
+            # 보고) 그 값을 display_name 으로도 upsert. upsert_session 의
+            # CASE 로직이 최초에만 저장하고 이후엔 유지하므로 UUID 로 업그레이드된
+            # 뒤에도 display_name 은 그대로 남음.
+            sid = s.session_id or ""
+            display_name = "" if _UUID_RE.match(sid) else sid
             await upsert_session(
                 db, body.server, s.project_path, s.project_name,
                 s.pid, s.status, session_url=s.session_url,
-                session_id=s.session_id,
+                session_id=s.session_id, display_name=display_name,
             )
             if s.status == "running":
                 reported_paths.add(s.project_path)
