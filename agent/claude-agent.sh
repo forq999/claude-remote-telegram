@@ -35,30 +35,65 @@ LOG_FILE="${LOG_FILE:-$SCRIPT_DIR/claude-agent.log}"
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE"; }
 
 # --- 업데이트 ---
+# 안전하게 원격 스크립트로 교체:
+#   1) 임시 파일에 다운로드 (원본 건드리지 않음)
+#   2) 사이즈 sanity check (부분 수신 방어)
+#   3) bash -n 문법 검증 (깨진 파일로 덮어쓰기 방지)
+#   4) md5 비교 → 변경 없으면 no-op
+#   5) 현재 파일을 .bak 으로 백업 후 mv 로 원자적 교체
 do_update() {
     local quiet="${1:-}"
     if [ -z "${AUTO_UPDATE_URL:-}" ]; then
         [ -z "$quiet" ] && echo "AUTO_UPDATE_URL not set in agent.env"
         return 1
     fi
-    SELF="$(readlink -f "$0")"
+    local self tmp bak
+    self="$(readlink -f "$0")"
+    tmp="${self}.new.$$"
+    bak="${self}.bak"
     [ -z "$quiet" ] && echo "Fetching update from $AUTO_UPDATE_URL ..."
-    local new_script
-    new_script=$(curl -sf --connect-timeout 5 --max-time 30 "$AUTO_UPDATE_URL" 2>/dev/null || true)
-    if [ -z "$new_script" ]; then
+
+    # 완전 수신 보장: 임시 파일에 저장 → 부분 수신 즉시 감지
+    if ! curl -fsSL --connect-timeout 5 --max-time 30 -o "$tmp" "$AUTO_UPDATE_URL" 2>/dev/null; then
         [ -z "$quiet" ] && echo "Failed to fetch update"
+        rm -f "$tmp"
         return 1
     fi
+
+    # 사이즈 sanity check: 현재 파일의 절반 미만이면 부분 수신으로 간주
+    local cur_size new_size
+    cur_size=$(stat -c %s "$self" 2>/dev/null || echo 0)
+    new_size=$(stat -c %s "$tmp" 2>/dev/null || echo 0)
+    if [ "$cur_size" -gt 0 ] && [ "$new_size" -lt $((cur_size / 2)) ]; then
+        [ -z "$quiet" ] && echo "Downloaded size ($new_size) too small vs current ($cur_size) — abort"
+        log "Auto-update rejected: size $new_size < $cur_size/2"
+        rm -f "$tmp"
+        return 1
+    fi
+
+    # 문법 검증: bash 파싱 실패 시 교체하지 않음
+    if ! bash -n "$tmp" 2>/dev/null; then
+        [ -z "$quiet" ] && echo "Syntax check failed — abort"
+        log "Auto-update rejected: syntax error in downloaded file"
+        rm -f "$tmp"
+        return 1
+    fi
+
+    # md5 비교
     local old_hash new_hash
-    old_hash=$(md5sum "$SELF" | awk '{print $1}')
-    new_hash=$(echo "$new_script" | md5sum | awk '{print $1}')
+    old_hash=$(md5sum "$self" | awk '{print $1}')
+    new_hash=$(md5sum "$tmp" | awk '{print $1}')
     if [ "$old_hash" = "$new_hash" ]; then
         [ -z "$quiet" ] && echo "Already up to date"
+        rm -f "$tmp"
         return 0
     fi
-    echo "$new_script" > "$SELF"
-    chmod +x "$SELF"
-    [ -z "$quiet" ] && echo "Updated successfully"
+
+    # 백업 후 원자적 교체
+    cp "$self" "$bak" 2>/dev/null || true
+    mv "$tmp" "$self"
+    chmod +x "$self"
+    [ -z "$quiet" ] && echo "Updated successfully (backup at $bak)"
     if [ -z "$quiet" ]; then
         log "Manual update applied"
     else
