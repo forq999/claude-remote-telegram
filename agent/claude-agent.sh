@@ -498,10 +498,26 @@ report_status() {
             fi
         fi
 
+        # display_name (사람이 읽기 쉬운 세션 이름) 추출 — .sid 가 UUID 로
+        # 확정되었으면 해당 jsonl 첫 줄의 customTitle 을 읽어 서버에 병기 보고.
+        # resume 이어받은 세션 (처음부터 .sid=UUID) 이나 서버 DB 에 display_name
+        # 이 아직 없는 기존 세션에서도 자동 복구된다. 서버는 이 값을 최초 1회만
+        # 저장하므로 매 사이클 재보고해도 성능/정합성 이슈 없음.
+        local display_name=""
+        if [ -n "$sid" ] && [[ "$sid" != *"_"* ]]; then
+            local encoded_path jsonl_file
+            encoded_path=$(echo "$path" | sed 's|[/_]|-|g')
+            jsonl_file="$HOME/.claude/projects/$encoded_path/${sid}.jsonl"
+            if [ -f "$jsonl_file" ]; then
+                display_name=$(head -1 "$jsonl_file" 2>/dev/null | jq -r '.customTitle // empty' 2>/dev/null)
+            fi
+        fi
+
         sessions=$(echo "$sessions" | jq -c \
             --arg pp "$path" --arg pn "$name" --argjson pid "$pid" \
             --argjson idle "$idle_secs" --arg url "$url" --arg sid "$sid" \
-            '. + [{"project_path":$pp,"project_name":$pn,"pid":$pid,"status":"running","idle_seconds":$idle,"session_url":$url,"session_id":$sid}]')
+            --arg dn "$display_name" \
+            '. + [{"project_path":$pp,"project_name":$pn,"pid":$pid,"status":"running","idle_seconds":$idle,"session_url":$url,"session_id":$sid,"display_name":$dn}]')
     done
 
     api_call POST "/api/status" \

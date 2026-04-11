@@ -36,6 +36,7 @@ class SessionReport(BaseModel):
     idle_seconds: int
     session_url: str = ""
     session_id: str = ""
+    display_name: str = ""
 
 
 class StatusRequest(BaseModel):
@@ -140,12 +141,18 @@ def create_api_router(db_getter, api_token: str, notify_callback=None) -> APIRou
                 prev = await get_running_session(db, body.server, s.project_path)
                 if prev:
                     agent_stopped.append(s.project_path)
-            # session_id 가 아직 UUID 가 아니면 (에이전트의 초기 session_name
-            # 보고) 그 값을 display_name 으로도 upsert. upsert_session 의
-            # CASE 로직이 최초에만 저장하고 이후엔 유지하므로 UUID 로 업그레이드된
-            # 뒤에도 display_name 은 그대로 남음.
+            # display_name 결정 우선순위:
+            #  1) 에이전트가 jsonl 의 customTitle 에서 직접 추출해 보고한 값
+            #     (report_status 가 UUID 확정된 세션에 대해 채움)
+            #  2) session_id 필드가 아직 UUID 가 아닌 transient 상태
+            #     (start_session 직후 초기 session_name 보고)
+            # upsert_session 의 CASE 로직이 최초 non-empty 값만 저장하므로
+            # 이후 빈 값 보고가 와도 덮이지 않음. 또한 같은 값을 매 사이클
+            # 재보고해도 idempotent.
             sid = s.session_id or ""
-            display_name = "" if _UUID_RE.match(sid) else sid
+            display_name = s.display_name or ""
+            if not display_name and not _UUID_RE.match(sid):
+                display_name = sid
             await upsert_session(
                 db, body.server, s.project_path, s.project_name,
                 s.pid, s.status, session_url=s.session_url,
