@@ -330,15 +330,6 @@ process_commands() {
     done
 }
 
-# --- jsonl 파일 경로 조회 (없으면 빈 문자열) ---
-find_session_jsonl() {
-    local session_path=$1
-    [ -z "$session_path" ] && return
-    local encoded_path
-    encoded_path=$(echo "$session_path" | sed 's|[/_]|-|g')
-    ls -t "$HOME/.claude/projects/$encoded_path"/*.jsonl 2>/dev/null | head -1
-}
-
 # --- customTitle 매칭으로 세션 UUID 조회 ---
 # --name X 로 시작된 claude 세션은 해당 jsonl 첫 줄에
 #   {"type":"custom-title","customTitle":"X","sessionId":"<UUID>"}
@@ -365,16 +356,25 @@ find_jsonl_by_custom_title() {
 
 # --- 활동 시간 계산 (jsonl mtime과 .active 중 최근 값) ---
 # 사용법: get_activity_time <name> <session_path>
-# Claude Code가 모든 이벤트를 jsonl에 기록하므로 mtime이 신뢰성 있는 지표이나,
-# resume 직후에는 jsonl mtime이 오래되어 있으므로 .active와 비교하여 최근 값을 사용.
+# Claude Code가 모든 이벤트를 jsonl 에 기록하므로 해당 파일의 mtime 이
+# 신뢰성 있는 활동 지표. 단 반드시 이 세션의 jsonl 이어야 하므로 .sid 에
+# 저장된 UUID 로 직접 특정한다. mtime 추측 방식은 동일 경로의 수동 claude
+# 나 과거 세션 jsonl 에 오염되어 idle 감지가 망가질 수 있음.
+#
+# .sid 가 아직 session_name (UUID 미해결) 이거나 해당 jsonl 이 아직 없으면
+# .active 파일 mtime (start_session touch + fallback_cpu_touch_active 갱신)
+# 을 사용한다. resume 직후에는 jsonl mtime 이 resume 전 값이므로 .active
+# 와 max 를 취해 곧장 timeout 걸리는 것을 방지.
 get_activity_time() {
     local name=$1 session_path=$2
-    local jsonl_time=0 active_time=0
+    local jsonl_time=0 active_time=0 sid
 
-    local jsonl_file
-    jsonl_file=$(find_session_jsonl "$session_path")
-    if [ -n "$jsonl_file" ] && [ -f "$jsonl_file" ]; then
-        jsonl_time=$(stat -c %Y "$jsonl_file")
+    sid=$(cat "$PID_DIR/${name}.sid" 2>/dev/null || echo "")
+    if [ -n "$sid" ] && [[ "$sid" != *"_"* ]]; then
+        local encoded_path jsonl_file
+        encoded_path=$(echo "$session_path" | sed 's|[/_]|-|g')
+        jsonl_file="$HOME/.claude/projects/$encoded_path/${sid}.jsonl"
+        [ -f "$jsonl_file" ] && jsonl_time=$(stat -c %Y "$jsonl_file")
     fi
     active_time=$(stat -c %Y "$PID_DIR/${name}.active" 2>/dev/null || echo "0")
 
@@ -430,10 +430,12 @@ check_idle_sessions() {
             timeout_val=$DEFAULT_TIMEOUT
         fi
 
-        # jsonl 을 찾지 못한 경우에만 CPU 기반 폴백으로 .active 갱신
-        local jsonl_file
-        jsonl_file=$(find_session_jsonl "$session_path")
-        if [ -z "$jsonl_file" ]; then
+        # .sid 가 아직 session_name (UUID 미해결) 상태면 해당 jsonl 을
+        # 특정할 수 없으므로 CPU 변화로 .active 를 갱신하는 폴백에 의존.
+        # .sid 가 UUID 면 get_activity_time 이 해당 jsonl mtime 을 직접 쓴다.
+        local sid_state
+        sid_state=$(cat "$PID_DIR/${name}.sid" 2>/dev/null || echo "")
+        if [ -z "$sid_state" ] || [[ "$sid_state" == *"_"* ]]; then
             fallback_cpu_touch_active "$name" "$pid"
         fi
 
@@ -485,8 +487,8 @@ report_status() {
         fi
 
         # .sid 가 UUID 가 아닌 session_name 이면 customTitle 매칭으로 실제 UUID 해결.
-        # 주의: find_session_jsonl 같은 mtime 기반 식별은 동일 경로의 수동 claude /
-        # 이전 resume 세션의 jsonl 을 잘못 집어오므로 반드시 customTitle 기준으로.
+        # 주의: mtime 기반 식별(ls -t 등)은 동일 경로의 수동 claude / 이전 resume
+        # 세션의 jsonl 을 잘못 집어오므로 반드시 customTitle 기준으로.
         if [ -n "$sid" ] && [[ "$sid" == *"_"* ]]; then
             local resolved_id
             resolved_id=$(find_jsonl_by_custom_title "$path" "$sid")
