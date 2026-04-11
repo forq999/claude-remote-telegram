@@ -1,6 +1,19 @@
 #!/bin/bash
 set -euo pipefail
 
+# --- 워치독: 어떤 이유로든 스크립트가 오래 걸리면 자기 자신을 종료 ---
+# 정상 실행은 보통 수 초 이내 끝남. 장시간 실행 자체가 비정상.
+# api_call/do_update 의 curl timeout 이 누락되거나 예기치 못한 blocking I/O 가
+# 발생해도 3분 안에 스크립트가 스스로 종료되어 flock 이 해제되도록 함.
+(
+    sleep 180
+    kill -TERM $$ 2>/dev/null || true
+    sleep 5
+    kill -KILL $$ 2>/dev/null || true
+) &
+WATCHDOG_PID=$!
+trap 'kill $WATCHDOG_PID 2>/dev/null || true' EXIT
+
 # --- 크론 환경에서 PATH 설정 ---
 export PATH="$HOME/.local/bin:$PATH"
 CLAUDE_OPTS="--dangerously-skip-permissions --effort max --remote-control"
@@ -31,7 +44,7 @@ do_update() {
     SELF="$(readlink -f "$0")"
     [ -z "$quiet" ] && echo "Fetching update from $AUTO_UPDATE_URL ..."
     local new_script
-    new_script=$(curl -sf "$AUTO_UPDATE_URL" 2>/dev/null || true)
+    new_script=$(curl -sf --connect-timeout 5 --max-time 30 "$AUTO_UPDATE_URL" 2>/dev/null || true)
     if [ -z "$new_script" ]; then
         [ -z "$quiet" ] && echo "Failed to fetch update"
         return 1
@@ -90,7 +103,7 @@ validate_path() {
 api_call() {
     local method="$1" endpoint="$2"
     shift 2
-    curl -sf -X "$method" \
+    curl -sf --connect-timeout 5 --max-time 15 -X "$method" \
         -H "Authorization: Bearer $API_TOKEN" \
         -H "Content-Type: application/json" \
         "$BOT_API_URL$endpoint" "$@"
@@ -107,7 +120,7 @@ start_session() {
 
     if ! validate_path "$path"; then
         api_call POST "/api/commands/$cmd_id/done" \
-            -d '{"status":"failed","error":"path not allowed"}'
+            -d '{"status":"failed","error":"path not allowed"}' || true
         return
     fi
 
@@ -118,7 +131,7 @@ start_session() {
     if [ -f "$pid_file" ] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
         log "Session already running: $name (PID $(cat "$pid_file"))"
         api_call POST "/api/commands/$cmd_id/done" \
-            -d '{"status":"failed","error":"session already running locally"}'
+            -d '{"status":"failed","error":"session already running locally"}' || true
         return
     fi
 
@@ -156,7 +169,7 @@ start_session() {
     pid=$(pgrep -x claude -a 2>/dev/null | grep -F -- "$session_name" | awk '{print $1}' | head -1)
     if [ -z "$pid" ]; then
         api_call POST "/api/commands/$cmd_id/done" \
-            -d '{"status":"failed","error":"cannot start session at path"}'
+            -d '{"status":"failed","error":"cannot start session at path"}' || true
         return
     fi
     echo "$pid" > "$pid_file"
@@ -198,7 +211,7 @@ start_session() {
             '{server:$s,sessions:[{project_path:$pp,project_name:$pn,pid:$pid,status:"running",idle_seconds:0,session_url:$url,session_id:$sid}]}')" || true
 
     log "Started session: $name (PID $pid) at $path"
-    api_call POST "/api/commands/$cmd_id/done" -d '{"status":"done"}'
+    api_call POST "/api/commands/$cmd_id/done" -d '{"status":"done"}' || true
 }
 
 # --- 세션 종료 ---
@@ -219,7 +232,7 @@ stop_session() {
               "$PID_DIR/${name}.active" "$PID_DIR/${name}.path" \
               "$PID_DIR/${name}.sid" "$PID_DIR/${name}.url"
     fi
-    api_call POST "/api/commands/$cmd_id/done" -d '{"status":"done"}'
+    api_call POST "/api/commands/$cmd_id/done" -d '{"status":"done"}' || true
 }
 
 # --- 전체 세션 종료 ---
@@ -237,17 +250,20 @@ stop_all_sessions() {
               "$PID_DIR/${base}.sid" "$PID_DIR/${base}.url"
         log "Stopped session: $base"
     done
-    api_call POST "/api/commands/$cmd_id/done" -d '{"status":"done"}'
+    api_call POST "/api/commands/$cmd_id/done" -d '{"status":"done"}' || true
 }
 
 # --- 명령 폴링 및 처리 ---
 process_commands() {
     local resp
-    resp=$(api_call POST "/api/commands/$SERVER_NAME/claim") || return
+    # curl 실패 시 return 0 로 빠져나와야 set -e 가 메인을 종료시키지 않음.
+    # 폴링 실패는 조용히 이번 실행만 건너뛰고, 후속 루틴(idle 체크 / 상태 보고 /
+    # heartbeat)과 다음 크론 실행은 정상 진행되도록 한다.
+    resp=$(api_call POST "/api/commands/$SERVER_NAME/claim") || return 0
 
     local count
     count=$(echo "$resp" | jq '.commands | length')
-    [ "$count" -eq 0 ] && return
+    [ "$count" -eq 0 ] && return 0
 
     echo "$resp" | jq -c '.commands[]' | while read -r cmd; do
         local id action path params
@@ -274,7 +290,7 @@ process_commands() {
                 local name
                 name=$(project_name "$path")
                 echo "$new_timeout" > "$PID_DIR/${name}.timeout"
-                api_call POST "/api/commands/$id/done" -d '{"status":"done"}'
+                api_call POST "/api/commands/$id/done" -d '{"status":"done"}' || true
                 log "Timeout updated: $name -> ${new_timeout}s"
                 ;;
             clean)
@@ -293,7 +309,7 @@ process_commands() {
                     log "Clean: killed $cbase (PID $cpid)"
                 done
                 rm -f "$LOCK_FILE"
-                api_call POST "/api/commands/$id/done" -d '{"status":"done"}'
+                api_call POST "/api/commands/$id/done" -d '{"status":"done"}' || true
                 log "Clean completed"
                 ;;
         esac
